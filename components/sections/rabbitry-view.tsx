@@ -4,6 +4,7 @@ import { Card, SectionHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { Table, Column } from "@/components/ui/table";
+import { useRabbits } from "./use-ravia-data";
 
 interface Rabbit {
   id: number;
@@ -14,7 +15,15 @@ interface Rabbit {
   price: number;
 }
 
-const rabbits: Rabbit[] = [];
+const { data } = useRabbits();
+const rabbits: Rabbit[] = (data ?? []).map((r, i) => ({
+  id: i + 1,
+  name: r.tagId,
+  breed: r.breed,
+  sex: r.sex,
+  source: r.source,
+  price: Number(r.price),
+}));
 
 export function RabbitryView() {
   const columns: Column<Rabbit>[] = [

@@ -1,0 +1,265 @@
+// Ravia Farms — Prisma schema (Neon Postgres)
+// Single-farm-first, but every row is scoped by `farmId` so multi-tenancy is possible later.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  FARM_HAND
+  VET
+}
+
+enum PoultryBreed {
+  SASSO
+  KIENYEJI
+  LAYERS
+  BROILERS
+}
+
+enum CropType {
+  SUKUMA_WIKI
+  SPINACH
+  MANAGU
+  KIENYEJI_MIX
+}
+
+enum Sex {
+  FEMALE
+  MALE
+}
+
+enum FinanceType {
+  REVENUE
+  EXPENSE
+}
+
+enum ExpenseCategory {
+  FEED
+  INITIAL_STOCK
+  MEDICAL
+  LABOR
+  EQUIPMENT
+}
+
+enum RevenueCategory {
+  POULTRY
+  VEGETABLES
+  RABBITRY
+  CANINE
+  OTHER
+}
+
+model Farm {
+  id        String   @id @default(cuid())
+  name      String
+  currency  String   @default("KES")
+  createdAt DateTime @default(now())
+
+  users            User[]
+  poultryBatches   PoultryBatch[]
+  eggRecords       EggRecord[]
+  incubations      Incubation[]
+  poultryHealth    PoultryHealth[]
+  vegetableUnits   VegetableUnit[]
+  vegetableHealth  VegetableHealth[]
+  rabbits          Rabbit[]
+  rabbitPairings  RabbitPairing[]
+  dogs             Dog[]
+  dogHeats         DogHeat[]
+  transactions     FinanceTransaction[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  farmId       String
+  email        String
+  name         String?
+  passwordHash String
+  role         Role     @default(FARM_HAND)
+  createdAt    DateTime @default(now())
+
+  farm Farm @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@unique([farmId, email])
+  @@index([farmId])
+}
+
+model PoultryBatch {
+  id        String       @id @default(cuid())
+  farmId    String
+  name      String
+  breed     PoultryBreed
+  source    String
+  count     Int
+  unitPrice Decimal      @default(0)
+  deployDate DateTime
+
+  farm         Farm             @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  health      PoultryHealth[]
+
+  @@index([farmId])
+}
+
+model EggRecord {
+  id     String   @id @default(cuid())
+  farmId String
+  count  Int
+  date   DateTime
+
+  farm Farm @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@index([farmId])
+}
+
+model Incubation {
+  id     String   @id @default(cuid())
+  farmId String
+  count  Int
+  date   DateTime
+
+  farm Farm @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@index([farmId])
+}
+
+model PoultryHealth {
+  id        String   @id @default(cuid())
+  farmId    String
+  batchId   String?
+  batchName String
+  issue     String
+  affected  Int      @default(0)
+  mortality Int      @default(0)
+  rx        String?
+  photoUrl  String?
+  date      DateTime @default(now())
+
+  farm  Farm         @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  batch PoultryBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([farmId])
+}
+
+model VegetableUnit {
+  id          String   @id @default(cuid())
+  farmId      String
+  cropType    CropType
+  source      String
+  units       Int
+  pricePerStem Decimal @default(0)
+  stems       Int
+  deployDate  DateTime
+
+  farm         Farm                @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  health       VegetableHealth[]
+
+  @@index([farmId])
+}
+
+model VegetableHealth {
+  id        String   @id @default(cuid())
+  farmId    String
+  unitId    String?
+  batchName String
+  issue     String
+  affected  Int      @default(0)
+  loss      Int      @default(0)
+  rx        String?
+  photoUrl  String?
+  date      DateTime @default(now())
+
+  farm Farm         @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  unit VegetableUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([farmId])
+}
+
+model Rabbit {
+  id        String   @id @default(cuid())
+  farmId    String
+  tagId     String
+  breed     String
+  sex       Sex
+  source    String
+  price     Decimal  @default(0)
+  acquiredDate DateTime
+
+  farm         Farm             @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  pairingsAsDoe  RabbitPairing[] @relation("Doe")
+  pairingsAsBuck RabbitPairing[] @relation("Buck")
+
+  @@index([farmId])
+}
+
+model RabbitPairing {
+  id       String   @id @default(cuid())
+  farmId   String
+  doeId    String
+  buckId   String
+  date     DateTime
+
+  farm Farm   @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  doe  Rabbit @relation("Doe", fields: [doeId], references: [id], onDelete: Cascade)
+  buck Rabbit @relation("Buck", fields: [buckId], references: [id], onDelete: Cascade)
+
+  @@index([farmId])
+}
+
+model Dog {
+  id          String   @id @default(cuid())
+  farmId      String
+  name        String
+  breed       String
+  sex         Sex
+  source      String
+  price       Decimal  @default(0)
+  pedigree    String?
+  acquiredDate DateTime
+
+  farm         Farm                @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  heats        DogHeat[]
+
+  @@index([farmId])
+}
+
+model DogHeat {
+  id     String   @id @default(cuid())
+  farmId String
+  dogId  String
+  date   DateTime
+
+  farm Farm @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  dog  Dog  @relation(fields: [dogId], references: [id], onDelete: Cascade)
+
+  @@index([farmId])
+}
+
+model FinanceTransaction {
+  id          String         @id @default(cuid())
+  farmId      String
+  type        FinanceType
+  category    String
+  description String
+  qty         Decimal?       @default(0)
+  unitPrice   Decimal?       @default(0)
+  amount      Decimal
+  unitLabel   String?
+  sourceType  RevenueCategory?
+  // Generic reference to the originating batch/animal (PoultryBatch.id, VegetableUnit.id,
+  // Rabbit.id, or Dog.id). Kept as a plain string to avoid multi-FK relation complexity.
+  sourceRefId String?
+  date        DateTime
+
+  farm Farm @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@index([farmId])
+}

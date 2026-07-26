@@ -4,9 +4,17 @@ import { Card, SectionHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { Tag } from "@/components/ui/tag";
+import { usePoultryBatches } from "./use-ravia-data";
 
 // Placeholder — replaced by API in Phase 3.
-const batches: { name: string; breed: string; source: string; count: number; date: string }[] = [];
+const { data } = usePoultryBatches();
+const batches = (data ?? []).map((b) => ({
+  name: b.name,
+  breed: b.breed,
+  source: b.source,
+  count: b.count,
+  date: new Date(b.deployDate).toISOString().split("T")[0],
+}));
 
 export function PoultryView() {
   return (

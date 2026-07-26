@@ -10,18 +10,20 @@ import {
   dayDiff,
   todayISO,
 } from "@/lib/constants";
+import { useFinance, usePoultryBatches, useVegetableUnits } from "./use-ravia-data";
 
 // Placeholder data — will be replaced by TanStack Query in Phase 2/3.
-const PLACEHOLDER = {
-  eggsToday: 0,
-  vegUnits: 0,
-  netProfit: 0,
-  revenue: 0,
-  expenses: 0,
-};
+const { data: fin } = useFinance();
+const { data: poultry } = usePoultryBatches();
+const { data: veg } = useVegetableUnits();
+
+const vegUnits = (veg ?? []).reduce((a, b) => a + b.units, 0);
+const revenue = fin?.summary.revenue ?? 0;
+const expenses = fin?.summary.expenses ?? 0;
+const netProfit = fin?.summary.net ?? 0;
 
 export function DashboardView() {
-  const { eggsToday, vegUnits, netProfit, revenue, expenses } = PLACEHOLDER;
+  const eggsToday = 0;
   const trays = (eggsToday / EGGS_PER_TRAY).toFixed(1);
 
   // Sample alert derived from the domain constants (demonstrates the pattern).

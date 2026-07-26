@@ -4,6 +4,7 @@ import { Card, SectionHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { Table, Column } from "@/components/ui/table";
+import { useDogs } from "./use-ravia-data";
 
 interface Dog {
   id: number;
@@ -14,7 +15,15 @@ interface Dog {
   price: number;
 }
 
-const dogs: Dog[] = [];
+const { data } = useDogs();
+const dogs: Dog[] = (data ?? []).map((d, i) => ({
+  id: i + 1,
+  name: d.name,
+  breed: d.breed,
+  sex: d.sex,
+  source: d.source,
+  price: Number(d.price),
+}));
 
 export function CanineView() {
   const columns: Column<Dog>[] = [

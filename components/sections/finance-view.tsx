@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Table, Column } from "@/components/ui/table";
 import { Tag } from "@/components/ui/tag";
 import { formatKES } from "@/lib/constants";
+import { useFinance } from "./use-ravia-data";
 
 interface Transaction {
   id: number;
@@ -15,12 +16,20 @@ interface Transaction {
   amount: number;
 }
 
-const transactions: Transaction[] = [];
+const { data } = useFinance();
+const transactions: Transaction[] = (data?.transactions ?? []).map((t, i) => ({
+  id: i + 1,
+  date: new Date(t.date).toISOString().split("T")[0],
+  type: t.type === "REVENUE" ? "revenue" : "expense",
+  cat: t.category,
+  desc: t.description,
+  amount: Number(t.amount),
+}));
 
 export function FinanceView() {
-  const revenue = 0;
-  const expenses = 0;
-  const net = revenue - expenses;
+  const revenue = data?.summary.revenue ?? 0;
+  const expenses = data?.summary.expenses ?? 0;
+  const net = data?.summary.net ?? 0;
   const netColor = net >= 0 ? "text-primary" : "text-danger";
 
   const columns: Column<Transaction>[] = [

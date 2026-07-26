@@ -4,8 +4,15 @@ import { Card, SectionHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { StatCard } from "@/components/ui/card";
+import { useVegetableUnits } from "./use-ravia-data";
 
-const batches: { type: string; units: number; source: string; date: string }[] = [];
+const { data } = useVegetableUnits();
+const batches = (data ?? []).map((b) => ({
+  type: b.cropType,
+  units: b.units,
+  source: b.source,
+  date: new Date(b.deployDate).toISOString().split("T")[0],
+}));
 
 export function VegetablesView() {
   return (
