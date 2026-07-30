@@ -17,13 +17,21 @@ const NAV: NavItem[] = [
   { id: "finance", label: "Finance", icon: "fa-wallet" },
 ];
 
+// Admin-only — staff management. Not a "page you can't reach" so much as a
+// tool that shouldn't be offered to a role that can't use it.
+const ADMIN_NAV: NavItem = { id: "staff", label: "Staff", icon: "fa-users-cog" };
+
 interface SidebarProps {
   active: SectionId;
   onSelect: (id: SectionId) => void;
   collapsed: boolean;
+  isAdmin?: boolean;
+  onSignOut?: () => void;
 }
 
-export function Sidebar({ active, onSelect, collapsed }: SidebarProps) {
+export function Sidebar({ active, onSelect, collapsed, isAdmin, onSignOut }: SidebarProps) {
+  const items = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
+
   return (
     <aside
       className={`bg-sidebar border-r border-hairline flex flex-col flex-shrink-0 transition-all duration-300 ${
@@ -42,8 +50,8 @@ export function Sidebar({ active, onSelect, collapsed }: SidebarProps) {
         )}
       </div>
 
-      <nav className="flex flex-col gap-1">
-        {NAV.map((item) => (
+      <nav className="flex flex-col gap-1 flex-1">
+        {items.map((item) => (
           <button
             key={item.id}
             onClick={() => onSelect(item.id)}
@@ -61,6 +69,19 @@ export function Sidebar({ active, onSelect, collapsed }: SidebarProps) {
           </button>
         ))}
       </nav>
+
+      {onSignOut ? (
+        <button
+          onClick={onSignOut}
+          className={`flex items-center gap-3 px-4 py-3 rounded-ravia font-medium text-[0.95rem] text-muted hover:bg-danger/10 hover:text-danger transition-colors ${
+            collapsed ? "justify-center" : ""
+          }`}
+          title="Sign out"
+        >
+          <i className="fas fa-right-from-bracket" />
+          {!collapsed && <span>Sign out</span>}
+        </button>
+      ) : null}
     </aside>
   );
 }

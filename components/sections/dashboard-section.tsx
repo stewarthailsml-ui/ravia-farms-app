@@ -7,11 +7,17 @@ import { VegetablesView } from "./vegetables-view";
 import { RabbitryView } from "./rabbitry-view";
 import { CanineView } from "./canine-view";
 import { FinanceView } from "./finance-view";
+import { StaffView } from "./staff-view";
 
-export function DashboardSection({ active }: { active: SectionId }) {
+interface DashboardSectionProps {
+  active: SectionId;
+  onNavigate?: (id: SectionId) => void;
+}
+
+export function DashboardSection({ active, onNavigate }: DashboardSectionProps) {
   switch (active) {
     case "dashboard":
-      return <DashboardView />;
+      return <DashboardView onNavigate={onNavigate} />;
     case "poultry":
       return <PoultryView />;
     case "vegetables":
@@ -22,6 +28,8 @@ export function DashboardSection({ active }: { active: SectionId }) {
       return <CanineView />;
     case "finance":
       return <FinanceView />;
+    case "staff":
+      return <StaffView />;
     default:
       return <DashboardView />;
   }

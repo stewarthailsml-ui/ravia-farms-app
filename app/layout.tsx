@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
-import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { ToastProvider } from "@/components/ui/toast";
 import { PwaRegister } from "@/components/pwa/pwa-register";
 import { OfflineBanner } from "@/components/pwa/offline-banner";
@@ -47,7 +46,7 @@ export default function RootLayout({
         <Providers>
           <ToastProvider>
             <OfflineBanner />
-            <DashboardShell>{children}</DashboardShell>
+            {children}
           </ToastProvider>
         </Providers>
         <PwaRegister />

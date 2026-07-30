@@ -8,7 +8,8 @@ export type SectionId =
   | "vegetables"
   | "rabbits"
   | "dogs"
-  | "finance";
+  | "finance"
+  | "staff";
 
 export const SECTIONS: SectionId[] = [
   "dashboard",
@@ -17,6 +18,7 @@ export const SECTIONS: SectionId[] = [
   "rabbits",
   "dogs",
   "finance",
+  "staff",
 ];
 
 // Eggs per tray

@@ -1,48 +1,198 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, FinanceResponse, PoultryBatchRow, VegetableUnitRow, RabbitRow, DogRow } from "@/lib/api-client";
+import { useEffect, useState } from "react";
+import {
+  api,
+  ADMIN_ROLES,
+  Profile,
+  Role,
+  FinanceResponse,
+  PoultryBatchRow,
+  EggRecordRow,
+  IncubationRow,
+  PoultryHealthRow,
+  VegetableUnitRow,
+  VegetableHealthRow,
+  RabbitRow,
+  RabbitPairingRow,
+  DogRow,
+  DogHeatRow,
+} from "@/lib/api-client";
+import { createClientSupabase } from "@/lib/supabase/client";
 
-export function useFinance() {
+// ---------- Profile (current user + role) ----------
+// Queried directly against Supabase (RLS-protected: a user always sees their own
+// row) rather than through an Edge Function — there's no domain logic here, just
+// "who am I", so a function hop would be pure overhead.
+export function useProfile() {
+  const query = useQuery<Profile | null>({
+    queryKey: ["profile"],
+    queryFn: async () => {
+      const supabase = createClientSupabase();
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) return null;
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", auth.user.id)
+        .single();
+      if (error) throw error;
+      return data as Profile;
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const isAdmin = !!query.data && ADMIN_ROLES.includes(query.data.role);
+  return { ...query, isAdmin };
+}
+
+// ---------- Queries ----------
+export function useFinance(archived = false) {
   return useQuery<FinanceResponse>({
-    queryKey: ["finance"],
-    queryFn: () => api.get<FinanceResponse>("/api/finance"),
+    queryKey: ["finance", { archived }],
+    queryFn: () => api.get<FinanceResponse>("finance", archived ? { archived: "true" } : undefined),
   });
 }
 
-export function usePoultryBatches() {
+export function usePoultryBatches(archived = false) {
   return useQuery<PoultryBatchRow[]>({
-    queryKey: ["poultry"],
-    queryFn: () => api.get<PoultryBatchRow[]>("/api/poultry"),
+    queryKey: ["poultry", { archived }],
+    queryFn: () => api.get<PoultryBatchRow[]>("poultry", archived ? { archived: "true" } : undefined),
   });
 }
 
-export function useVegetableUnits() {
+export function useEggRecords(archived = false) {
+  return useQuery<EggRecordRow[]>({
+    queryKey: ["eggs", { archived }],
+    queryFn: () => api.get<EggRecordRow[]>("eggs", archived ? { archived: "true" } : undefined),
+  });
+}
+
+export function useIncubations(archived = false) {
+  return useQuery<IncubationRow[]>({
+    queryKey: ["incubations", { archived }],
+    queryFn: () => api.get<IncubationRow[]>("incubations", archived ? { archived: "true" } : undefined),
+  });
+}
+
+export function usePoultryHealth(archived = false) {
+  return useQuery<PoultryHealthRow[]>({
+    queryKey: ["poultry-health", { archived }],
+    queryFn: () => api.get<PoultryHealthRow[]>("poultry-health", archived ? { archived: "true" } : undefined),
+  });
+}
+
+export function useVegetableUnits(archived = false) {
   return useQuery<VegetableUnitRow[]>({
-    queryKey: ["vegetables"],
-    queryFn: () => api.get<VegetableUnitRow[]>("/api/vegetables"),
+    queryKey: ["vegetables", { archived }],
+    queryFn: () => api.get<VegetableUnitRow[]>("vegetables", archived ? { archived: "true" } : undefined),
   });
 }
 
-export function useRabbits() {
+export function useVegetableHealth(archived = false) {
+  return useQuery<VegetableHealthRow[]>({
+    queryKey: ["vegetable-health", { archived }],
+    queryFn: () => api.get<VegetableHealthRow[]>("vegetable-health", archived ? { archived: "true" } : undefined),
+  });
+}
+
+export function useRabbits(archived = false) {
   return useQuery<RabbitRow[]>({
-    queryKey: ["rabbits"],
-    queryFn: () => api.get<RabbitRow[]>("/api/rabbits"),
+    queryKey: ["rabbits", { archived }],
+    queryFn: () => api.get<RabbitRow[]>("rabbits", archived ? { archived: "true" } : undefined),
   });
 }
 
-export function useDogs() {
+export function useRabbitPairings(archived = false) {
+  return useQuery<RabbitPairingRow[]>({
+    queryKey: ["rabbit-pairings", { archived }],
+    queryFn: () => api.get<RabbitPairingRow[]>("rabbit-pairings", archived ? { archived: "true" } : undefined),
+  });
+}
+
+export function useDogs(archived = false) {
   return useQuery<DogRow[]>({
-    queryKey: ["dogs"],
-    queryFn: () => api.get<DogRow[]>("/api/dogs"),
+    queryKey: ["dogs", { archived }],
+    queryFn: () => api.get<DogRow[]>("dogs", archived ? { archived: "true" } : undefined),
   });
 }
 
-// Generic create mutation that invalidates the given query key.
-export function useCreate(key: string, url: string) {
+export function useDogHeats(archived = false) {
+  return useQuery<DogHeatRow[]>({
+    queryKey: ["dog-heats", { archived }],
+    queryFn: () => api.get<DogHeatRow[]>("dog-heats", archived ? { archived: "true" } : undefined),
+  });
+}
+
+// ---------- Mutations ----------
+
+// Generic create mutation that invalidates the given query key (all archived
+// variants included, since a new record always lands in the live/active view).
+export function useCreate<T = unknown>(key: string, url: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: unknown) => api.post(url, data),
+    mutationFn: (data: unknown) => api.post<T>(url, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: [key] }),
   });
+}
+
+// Admin-only archive (never a hard delete — see Edge Function + RLS). Invalidates
+// both the live and archived views of this entity.
+export function useArchive(key: string, url: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.archive(url, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [key] }),
+  });
+}
+
+// ---------- Staff (admin) ----------
+export interface StaffMember {
+  id: string;
+  email: string;
+  name: string | null;
+  role: Role;
+  archived_at: string | null;
+  created_at: string;
+}
+
+export function useStaff() {
+  return useQuery<StaffMember[]>({
+    queryKey: ["staff"],
+    queryFn: () => api.get<StaffMember[]>("staff"),
+  });
+}
+
+export function useInviteStaff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { email: string; name?: string; role: Role }) => api.post("staff", data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff"] }),
+  });
+}
+
+export function useUpdateStaff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { userId: string; role?: Role; deactivate?: boolean }) => api.patch("staff", data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff"] }),
+  });
+}
+
+// ---------- Offline/online (used to disable mutations while offline) ----------
+export function useOnline() {
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  return online;
 }

@@ -31,6 +31,20 @@ body {
   border-radius: 10px;
 }
 
+/* Toast slide-in — referenced via Tailwind's arbitrary animate-[slideIn_...] in
+   components/ui/toast.tsx. Tailwind emits the `animation` property for an
+   arbitrary value but does not synthesize the keyframes themselves. */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 @layer utilities {
   .text-primary-ravia {
     color: var(--primary);

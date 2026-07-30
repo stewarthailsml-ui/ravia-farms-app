@@ -1,14 +1,19 @@
 "use client";
 
 import { useState, ReactNode, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { SectionId } from "@/lib/constants";
 import { DashboardSection } from "@/components/sections/dashboard-section";
+import { useProfile } from "@/components/sections/use-ravia-data";
+import { createClientSupabase } from "@/lib/supabase/client";
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<SectionId>("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { isAdmin } = useProfile();
+  const router = useRouter();
 
   // Collapse sidebar under 900px (matches prototype mobile breakpoint)
   useEffect(() => {
@@ -20,15 +25,29 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Staff is admin-only; if a role change (or a staff account) lands here while
+  // it's the active section, fall back to the dashboard rather than show a
+  // section the sidebar itself would no longer offer.
+  useEffect(() => {
+    if (active === "staff" && !isAdmin) setActive("dashboard");
+  }, [active, isAdmin]);
+
+  async function onSignOut() {
+    await createClientSupabase().auth.signOut();
+    router.push("/auth/signin");
+    router.refresh();
+  }
+
+  function select(id: SectionId) {
+    setActive(id);
+    setMobileOpen(false);
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Desktop sidebar (hidden on small screens; drawer used instead) */}
       <div className="hidden md:block">
-        <Sidebar
-          active={active}
-          onSelect={(id) => setActive(id)}
-          collapsed={collapsed}
-        />
+        <Sidebar active={active} onSelect={select} collapsed={collapsed} isAdmin={isAdmin} onSignOut={onSignOut} />
       </div>
 
       {/* Mobile drawer */}
@@ -39,14 +58,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
           <div className="absolute left-0 top-0 h-full">
-            <Sidebar
-              active={active}
-              onSelect={(id) => {
-                setActive(id);
-                setMobileOpen(false);
-              }}
-              collapsed={false}
-            />
+            <Sidebar active={active} onSelect={select} collapsed={false} isAdmin={isAdmin} onSignOut={onSignOut} />
           </div>
         </div>
       ) : null}
@@ -64,7 +76,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <span className="font-logo text-primary text-lg">Ravia Farms</span>
         </div>
 
-        <DashboardSection active={active} />
+        <DashboardSection active={active} onNavigate={select} />
       </main>
     </div>
   );

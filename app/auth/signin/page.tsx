@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { createClientSupabase } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,16 +17,17 @@ export default function SignInPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const res = await signIn("credentials", {
+    const supabase = createClientSupabase()
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
-      redirect: false,
-    });
-    setLoading(false);
-    if (res?.error) {
+    })
+    setLoading(false)
+    if (error) {
       setError("Invalid email or password.");
     } else {
-      router.push("/");
+      router.push("/")
+      router.refresh()
     }
   }
 
@@ -75,7 +76,7 @@ export default function SignInPage() {
           </form>
         </Card>
         <p className="text-center text-muted text-xs mt-4">
-          Default demo: owner@ravia.farm / ravia1234 (after running /api/seed)
+          Default demo: owner@ravia.farm / ravia1234
         </p>
       </div>
     </div>

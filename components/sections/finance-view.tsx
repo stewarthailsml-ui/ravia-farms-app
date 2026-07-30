@@ -1,32 +1,46 @@
 "use client";
 
+import { useState } from "react";
 import { Card, SectionHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, Column } from "@/components/ui/table";
 import { Tag } from "@/components/ui/tag";
+import { ArchiveButton } from "@/components/ui/archive-button";
+import { ArchivedToggle } from "@/components/ui/archived-toggle";
 import { formatKES } from "@/lib/constants";
 import { useFinance } from "./use-ravia-data";
+import { LogExpenseModal, LogRevenueModal } from "./modals/finance-modals";
 
 interface Transaction {
-  id: number;
+  id: string;
   date: string;
   type: "revenue" | "expense";
   cat: string;
   desc: string;
   amount: number;
+  qty: number | null;
+  unitPrice: number | null;
+  unitLabel: string | null;
 }
 
-const { data } = useFinance();
-const transactions: Transaction[] = (data?.transactions ?? []).map((t, i) => ({
-  id: i + 1,
-  date: new Date(t.date).toISOString().split("T")[0],
-  type: t.type === "REVENUE" ? "revenue" : "expense",
-  cat: t.category,
-  desc: t.description,
-  amount: Number(t.amount),
-}));
-
 export function FinanceView() {
+  const [showArchived, setShowArchived] = useState(false);
+  const { data } = useFinance(showArchived);
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [revenueOpen, setRevenueOpen] = useState(false);
+
+  const transactions: Transaction[] = (data?.transactions ?? []).map((t) => ({
+    id: t.id,
+    date: new Date(t.date).toISOString().split("T")[0],
+    type: t.type === "REVENUE" ? "revenue" : "expense",
+    cat: t.category,
+    desc: t.description,
+    amount: Number(t.amount),
+    qty: t.qty,
+    unitPrice: t.unit_price,
+    unitLabel: t.unit_label,
+  }));
+
   const revenue = data?.summary.revenue ?? 0;
   const expenses = data?.summary.expenses ?? 0;
   const net = data?.summary.net ?? 0;
@@ -37,19 +51,34 @@ export function FinanceView() {
     {
       key: "type",
       header: "Type",
-      render: (t) => (
-        <Tag tone={t.type === "revenue" ? "success" : "danger"}>{t.type}</Tag>
-      ),
+      render: (t) => <Tag tone={t.type === "revenue" ? "success" : "danger"}>{t.type}</Tag>,
     },
     { key: "cat", header: "Category" },
-    { key: "desc", header: "Details & Breakdown", render: (t) => <strong>{t.desc}</strong> },
+    {
+      key: "desc",
+      header: "Details & Breakdown",
+      render: (t) => (
+        <>
+          <strong>{t.desc}</strong>
+          {t.qty && t.unitPrice ? (
+            <span className={`block text-[0.7rem] font-medium mt-0.5 ${t.type === "revenue" ? "text-primary" : "text-accent"}`}>
+              {t.qty.toLocaleString()} {t.unitLabel ?? "units"} @ {t.unitPrice.toLocaleString()} = {t.amount.toLocaleString()}
+            </span>
+          ) : null}
+        </>
+      ),
+    },
     {
       key: "amount",
       header: "Amount (KES)",
       className: "font-bold",
       render: (t) => formatKES(t.amount),
     },
-    { key: "action", header: "Action", render: () => <Button variant="outline" size="sm">X</Button> },
+    {
+      key: "action",
+      header: "Action",
+      render: (t) => (showArchived ? null : <ArchiveButton id={t.id} queryKey="finance" url="finance" label="X" />),
+    },
   ];
 
   return (
@@ -57,10 +86,10 @@ export function FinanceView() {
       <SectionHeader
         action={
           <>
-            <Button variant="danger" size="sm">
+            <Button variant="danger" size="sm" onClick={() => setExpenseOpen(true)}>
               <i className="fas fa-minus" /> Expense
             </Button>
-            <Button variant="success" size="sm">
+            <Button variant="success" size="sm" onClick={() => setRevenueOpen(true)}>
               <i className="fas fa-plus" /> Revenue
             </Button>
           </>
@@ -87,6 +116,9 @@ export function FinanceView() {
       </Card>
 
       <Card title="Transaction History">
+        <div className="flex justify-end mb-3">
+          <ArchivedToggle checked={showArchived} onChange={setShowArchived} />
+        </div>
         <Table
           columns={columns}
           rows={transactions}
@@ -102,6 +134,9 @@ export function FinanceView() {
           }
         />
       </Card>
+
+      <LogExpenseModal open={expenseOpen} onClose={() => setExpenseOpen(false)} />
+      <LogRevenueModal open={revenueOpen} onClose={() => setRevenueOpen(false)} />
     </div>
   );
 }
