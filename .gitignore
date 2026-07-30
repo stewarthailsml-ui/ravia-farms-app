@@ -32,3 +32,6 @@ next-env.d.ts
 
 # planning (keep tracked in git, but ignore local scratch)
 .planning/scratch/
+
+.vercel
+.env*
