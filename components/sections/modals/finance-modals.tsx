@@ -13,7 +13,18 @@ interface ModalBaseProps {
   onClose: () => void;
 }
 
-const EXPENSE_CATS = ["Feed", "Initial Stock/Purchase", "Medical", "Labor", "Equipment"] as const;
+// Mirrors ExpenseSchema's enum. Vaccine/Pesticide match what an input purchase
+// posts, so a manually entered expense lands in the same category as the
+// equivalent purchase rather than a parallel one.
+const EXPENSE_CATS = [
+  "Feed",
+  "Vaccine",
+  "Pesticide",
+  "Initial Stock/Purchase",
+  "Medical",
+  "Labor",
+  "Equipment",
+] as const;
 const REVENUE_CATS = ["Poultry", "Vegetables", "Rabbitry", "Canine", "Other"] as const;
 
 export function LogExpenseModal({ open, onClose }: ModalBaseProps) {

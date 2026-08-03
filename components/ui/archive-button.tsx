@@ -10,6 +10,8 @@ interface ArchiveButtonProps {
   url: string;
   label?: string;
   confirmMessage?: string;
+  /** Extra caches invalidated on success — see useArchive. */
+  alsoInvalidate?: string[];
 }
 
 // Renders nothing for staff — archiving is admin-only, and the boundary that
@@ -21,9 +23,10 @@ export function ArchiveButton({
   url,
   label = "Archive",
   confirmMessage = "Archive this record? It will be hidden from the active view but never deleted.",
+  alsoInvalidate,
 }: ArchiveButtonProps) {
   const { isAdmin } = useProfile();
-  const archive = useArchive(queryKey, url);
+  const archive = useArchive(queryKey, url, alsoInvalidate);
   const { showToast } = useToast();
 
   if (!isAdmin) return null;

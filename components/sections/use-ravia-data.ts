@@ -18,6 +18,9 @@ import {
   RabbitPairingRow,
   DogRow,
   DogHeatRow,
+  InputsResponse,
+  InputPurchaseRow,
+  InputUsageRow,
 } from "@/lib/api-client";
 import { createClientSupabase } from "@/lib/supabase/client";
 
@@ -125,25 +128,67 @@ export function useDogHeats(archived = false) {
   });
 }
 
+// ---------- Inputs & Stock ----------
+// One query serves the catalog, the computed stock balances and the supplier
+// history — the purchase modal needs all three to prefill itself.
+export function useInputs(archived = false) {
+  return useQuery<InputsResponse>({
+    queryKey: ["inputs", { archived }],
+    queryFn: () => api.get<InputsResponse>("inputs", archived ? { archived: "true" } : undefined),
+  });
+}
+
+export function useInputPurchases(archived = false) {
+  return useQuery<InputPurchaseRow[]>({
+    queryKey: ["input-purchases", { archived }],
+    queryFn: () =>
+      api.get<InputPurchaseRow[]>("input-purchases", archived ? { archived: "true" } : undefined),
+  });
+}
+
+export function useInputUsage(archived = false) {
+  return useQuery<InputUsageRow[]>({
+    queryKey: ["input-usage", { archived }],
+    queryFn: () => api.get<InputUsageRow[]>("input-usage", archived ? { archived: "true" } : undefined),
+  });
+}
+
 // ---------- Mutations ----------
 
 // Generic create mutation that invalidates the given query key (all archived
 // variants included, since a new record always lands in the live/active view).
-export function useCreate<T = unknown>(key: string, url: string) {
+//
+// `alsoInvalidate` covers writes with server-side side-effects on other
+// entities: deploying a batch or a unit also writes the purchase EXPENSE row, so
+// the finance cache is stale the moment the deploy succeeds. Without this the
+// row lands in the DB but the P&L keeps serving its cached totals until a reload.
+export function useCreate<T = unknown>(key: string, url: string, alsoInvalidate: string[] = []) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: unknown) => api.post<T>(url, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [key] }),
+    onSuccess: () => {
+      for (const k of [key, ...alsoInvalidate]) {
+        qc.invalidateQueries({ queryKey: [k] });
+      }
+    },
   });
 }
 
 // Admin-only archive (never a hard delete — see Edge Function + RLS). Invalidates
 // both the live and archived views of this entity.
-export function useArchive(key: string, url: string) {
+//
+// `alsoInvalidate` mirrors useCreate: archiving an input purchase archives its
+// paired EXPENSE too and changes the stock balance, so the finance and inputs
+// caches are stale the moment it succeeds.
+export function useArchive(key: string, url: string, alsoInvalidate: string[] = []) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.archive(url, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [key] }),
+    onSuccess: () => {
+      for (const k of [key, ...alsoInvalidate]) {
+        qc.invalidateQueries({ queryKey: [k] });
+      }
+    },
   });
 }
 

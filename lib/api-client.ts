@@ -98,6 +98,10 @@ export interface FinanceTxn {
   unit_price: number | null
   amount: number
   unit_label: string | null
+  // Which sector the money belongs to. NULL on legacy manual expenses entered
+  // before the inputs module; every auto-posted row carries it.
+  source_type: 'POULTRY' | 'VEGETABLES' | 'RABBITRY' | 'CANINE' | 'OTHER' | null
+  source_ref_id: string | null
   date: string
   archived_at: string | null
 }
@@ -207,5 +211,75 @@ export interface DogHeatRow {
   dog_id: string
   dog_name: string
   date: string
+  archived_at: string | null
+}
+
+// ---------- Inputs & Stock ----------
+export type InputCategory = 'FEED' | 'VACCINE' | 'PESTICIDE' | 'MEDICAL' | 'EQUIPMENT' | 'OTHER'
+export type InputSector = 'POULTRY' | 'VEGETABLES' | 'RABBITRY' | 'CANINE' | 'GENERAL'
+
+export interface InputItemRow {
+  id: string
+  name: string
+  category: InputCategory
+  sector: InputSector
+  unit_label: string
+  last_supplier: string | null
+  last_unit_price: number | null
+  archived_at: string | null
+}
+
+// From the input_stock view — `on_hand` is computed (purchased - used), never
+// stored, so archiving a bad purchase corrects it with no reconciliation.
+export interface InputStockRow {
+  item_id: string
+  name: string
+  category: InputCategory
+  sector: InputSector
+  unit_label: string
+  last_supplier: string | null
+  last_unit_price: number | null
+  purchased: number
+  used: number
+  on_hand: number
+  total_spent: number
+  last_purchase_date: string | null
+}
+
+export interface InputsResponse {
+  items: InputItemRow[]
+  stock: InputStockRow[]
+  suppliers: string[]
+}
+
+export interface InputPurchaseRow {
+  id: string
+  item_id: string
+  item_name: string
+  item_category: InputCategory
+  unit_label: string
+  supplier: string
+  qty: number
+  unit_price: number
+  amount: number
+  sector: InputSector
+  date: string
+  finance_txn_id: string | null
+  notes: string | null
+  archived_at: string | null
+}
+
+export interface InputUsageRow {
+  id: string
+  item_id: string
+  item_name: string
+  item_category: InputCategory
+  unit_label: string
+  qty: number
+  sector: InputSector
+  date: string
+  notes: string | null
+  source_module: string | null
+  source_ref_id: string | null
   archived_at: string | null
 }

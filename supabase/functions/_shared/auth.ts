@@ -12,9 +12,36 @@ const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
 export const ADMIN_ROLES = ['OWNER', 'MANAGER']
 
 export const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('NEXT_PUBLIC_APP_URL') ?? 'http://localhost:3000',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
+  'Access-Control-Max-Age': '86400',
+}
+
+// A single hardcoded origin breaks every environment that isn't the one deployed
+// with. Reflect the caller's Origin when it is on the allowlist instead.
+// ALLOWED_ORIGINS (comma-separated) wins; otherwise the app URL + local dev.
+const allowedOrigins = new Set(
+  (Deno.env.get('ALLOWED_ORIGINS') ??
+    [Deno.env.get('NEXT_PUBLIC_APP_URL'), 'http://localhost:3000', 'http://127.0.0.1:3000']
+      .filter(Boolean).join(','))
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+)
+
+function corsFor(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin')
+  if (!origin) return { ...corsHeaders }
+  const normalized = origin.replace(/\/$/, '')
+  if (!allowedOrigins.has(normalized)) return { ...corsHeaders }
+  return { ...corsHeaders, 'Access-Control-Allow-Origin': origin, Vary: 'Origin' }
+}
+
+/** Stamps the per-request CORS headers onto an already-built response. */
+function withCors(res: Response, req: Request): Response {
+  const headers = new Headers(res.headers)
+  for (const [k, v] of Object.entries(corsFor(req))) headers.set(k, v)
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
 }
 
 export class HttpError extends Error {
@@ -125,17 +152,36 @@ export async function archiveRow(req: Request, ctx: Ctx, table: string): Promise
   return json(data)
 }
 
+/**
+ * Maps a PostgREST/plpgsql error onto an HTTP status.
+ *
+ * RPCs that raise deliberate business errors (`raise exception … using errcode`)
+ * come back as ordinary errors, so without this a "not enough stock" or "not an
+ * admin" reads as a 500 and the user is told the server broke rather than what
+ * they did wrong. The codes are the ones the migrations raise by hand.
+ */
+// deno-lint-ignore no-explicit-any
+export function rpcError(error: any): never {
+  const status =
+    error?.code === '42501' ? 403 // insufficient_privilege — no farm, or not an admin
+    : error?.code === '42704' ? 404 // undefined_object — used for "not found"
+    : error?.code === '22023' ? 400 // invalid_parameter_value — e.g. insufficient stock
+    : error?.code === '23505' ? 409 // unique_violation
+    : 500
+  throw new HttpError(status, error?.message ?? 'Unexpected error')
+}
+
 /** Wraps a handler with CORS preflight + uniform error mapping. */
 export function handle(fn: (req: Request, ctx: Ctx) => Promise<Response>) {
   return async (req: Request): Promise<Response> => {
-    if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+    if (req.method === 'OPTIONS') return new Response('ok', { headers: corsFor(req) })
     try {
       const ctx = await getCtx(req)
-      return await fn(req, ctx)
+      return withCors(await fn(req, ctx), req)
     } catch (e) {
       const err = e as Error
       const status = e instanceof HttpError ? e.status : 500
-      return json({ error: err.message ?? 'Unexpected error' }, status)
+      return withCors(json({ error: err.message ?? 'Unexpected error' }, status), req)
     }
   }
 }

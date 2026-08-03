@@ -23,6 +23,20 @@ max_rows = 1000
 # deprecated and the field is removed on 2026-10-30 once the always-revoked behaviour is permanent.
 # auto_expose_new_tables = true
 
+# Every Ravia function does its own auth in _shared/auth.ts (getCtx), and each
+# handles the CORS preflight itself. Leaving the gateway's verify_jwt on rejects
+# the browser's unauthenticated OPTIONS request before the function ever runs, so
+# every call from the app fails preflight. The pre-existing functions were
+# already deployed with it off; these are declared here so it survives a redeploy.
+[functions.inputs]
+verify_jwt = false
+
+[functions.input-purchases]
+verify_jwt = false
+
+[functions.input-usage]
+verify_jwt = false
+
 [api.tls]
 # Enable HTTPS endpoints locally using a self-signed certificate.
 enabled = false

@@ -108,7 +108,17 @@ export type DogHeat = z.infer<typeof DogHeatSchema>;
 // `type` is explicit (not shape-sniffed) so the API can dispatch without guessing.
 export const ExpenseSchema = z.object({
   type: z.literal("expense").default("expense"),
-  cat: z.enum(["Feed", "Initial Stock/Purchase", "Medical", "Labor", "Equipment"]),
+  // Vaccine/Pesticide were added alongside the inputs module so a manually
+  // entered expense can use the same vocabulary an input purchase posts with.
+  cat: z.enum([
+    "Feed",
+    "Vaccine",
+    "Pesticide",
+    "Initial Stock/Purchase",
+    "Medical",
+    "Labor",
+    "Equipment",
+  ]),
   desc: z.string().min(1),
   // Feed category derives amount from bags * pricePerBag (spec's breakdown line);
   // all other categories use the flat `amount` field.
@@ -132,6 +142,56 @@ export const RevenueSchema = z.object({
   date: dateString,
 });
 export type Revenue = z.infer<typeof RevenueSchema>;
+
+// ---------- Inputs & Stock ----------
+export const INPUT_CATEGORIES = ["FEED", "VACCINE", "PESTICIDE", "MEDICAL", "EQUIPMENT", "OTHER"] as const;
+export const INPUT_SECTORS = ["POULTRY", "VEGETABLES", "RABBITRY", "CANINE", "GENERAL"] as const;
+
+const inputCategory = z.enum(INPUT_CATEGORIES);
+const inputSector = z.enum(INPUT_SECTORS);
+
+export const InputItemSchema = z.object({
+  name: z.string().min(1),
+  category: inputCategory,
+  sector: inputSector.default("GENERAL"),
+  unitLabel: z.string().min(1, "Unit is required"), // bags, doses, litres, kg
+});
+export type InputItem = z.infer<typeof InputItemSchema>;
+
+// A purchase either names an existing catalog item (itemId) or creates one
+// inline (newName + newCategory + newUnitLabel) — the modal's "+ New input…"
+// path. Requiring one or the other keeps first-time purchases to a single trip.
+export const InputPurchaseSchema = z.object({
+  itemId: z.string().optional(),
+  newName: z.string().optional(),
+  newCategory: inputCategory.optional(),
+  newUnitLabel: z.string().optional(),
+  newSector: inputSector.optional(),
+  supplier: z.string().min(1, "Supplier is required"),
+  qty: z.coerce.number().positive(),
+  unitPrice: z.coerce.number().min(0),
+  sector: inputSector,
+  date: dateString,
+  notes: z.string().optional().default(""),
+}).refine(
+  (v) => Boolean(v.itemId) || Boolean(v.newName && v.newCategory && v.newUnitLabel),
+  { message: "Select an existing input, or provide a name, category and unit for a new one" },
+);
+export type InputPurchase = z.infer<typeof InputPurchaseSchema>;
+
+// No amount, no finance posting: the cost was booked at purchase time, and
+// booking it again here would double-count it in the P&L.
+export const InputUsageSchema = z.object({
+  itemId: z.string().min(1, "Input is required"),
+  qty: z.coerce.number().positive(),
+  sector: inputSector,
+  date: dateString,
+  notes: z.string().optional().default(""),
+  // Populated only by the (not yet built) auto-decrement from module flows.
+  sourceModule: z.enum(["POULTRY", "VEGETABLES", "RABBITRY", "CANINE"]).optional(),
+  sourceRefId: z.string().optional(),
+});
+export type InputUsage = z.infer<typeof InputUsageSchema>;
 
 // ---------- Staff (admin) ----------
 export const StaffInviteSchema = z.object({
