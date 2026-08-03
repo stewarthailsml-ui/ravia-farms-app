@@ -18,40 +18,17 @@ serve(handle(async (req, ctx) => {
     const parsed = VegetableUnitSchema.safeParse(raw)
     if (!parsed.success) throw new HttpError(400, JSON.stringify(parsed.error.flatten()))
     const body = parsed.data
-    const units = Number(body.units)
-    const pricePerStem = Number(body.pricePerStem)
-    const stems = units * 84
-    const total = stems * pricePerStem
 
-    const { data: unit, error } = await ctx.supabase
-      .from('vegetable_units')
-      .insert({
-        farm_id: ctx.farmId,
-        crop_type: body.type,
-        source: body.source,
-        units,
-        price_per_stem: pricePerStem,
-        stems,
-        deploy_date: body.date,
-      })
-      .select()
-      .single()
-    if (error) throw error
-
-    const { error: finErr } = await ctx.supabase.from('finance_transactions').insert({
-      farm_id: ctx.farmId,
-      type: 'EXPENSE',
-      category: 'Initial Stock/Purchase',
-      description: `Purchase: Vegetable Unit ${body.type} (Source: ${body.source})`,
-      qty: stems,
-      unit_price: pricePerStem,
-      amount: total,
-      unit_label: 'stems',
-      source_type: 'VEGETABLES',
-      source_ref_id: unit.id,
-      date: new Date(body.date).toISOString(),
+    // Single transactional call — see deploy_poultry_batch for the rationale.
+    // The 84-stems-per-unit conversion now lives in the RPC alongside the writes.
+    const { data: unit, error } = await ctx.supabase.rpc('deploy_vegetable_unit', {
+      p_type: body.type,
+      p_source: body.source,
+      p_units: Number(body.units),
+      p_price_per_stem: Number(body.pricePerStem),
+      p_date: body.date,
     })
-    if (finErr) throw finErr
+    if (error) throw error
 
     return json(unit)
   }

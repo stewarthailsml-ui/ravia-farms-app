@@ -18,7 +18,8 @@ interface ModalBaseProps {
 const BREEDS = ["Sasso", "Kienyeji", "Layers", "Broilers"] as const;
 
 export function DeployPoultryBatchModal({ open, onClose }: ModalBaseProps) {
-  const create = useCreate("poultry", "poultry");
+  // Also invalidates "finance": the deploy writes the purchase expense too.
+  const create = useCreate("poultry", "poultry", ["finance"]);
   const { showToast } = useToast();
   const [form, setForm] = useState({
     name: "",

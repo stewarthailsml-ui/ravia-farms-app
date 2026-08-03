@@ -18,7 +18,8 @@ interface ModalBaseProps {
 const CROPS = ["Sukuma Wiki", "Spinach", "Managu", "Kienyeji Mix"] as const;
 
 export function DeployVegetableUnitsModal({ open, onClose }: ModalBaseProps) {
-  const create = useCreate("vegetables", "vegetables");
+  // Also invalidates "finance": the deploy writes the purchase expense too.
+  const create = useCreate("vegetables", "vegetables", ["finance"]);
   const { showToast } = useToast();
   const [form, setForm] = useState({
     type: "Sukuma Wiki" as (typeof CROPS)[number],

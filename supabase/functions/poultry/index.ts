@@ -18,39 +18,19 @@ serve(handle(async (req, ctx) => {
     const parsed = PoultryBatchSchema.safeParse(raw)
     if (!parsed.success) throw new HttpError(400, JSON.stringify(parsed.error.flatten()))
     const body = parsed.data
-    const qty = Number(body.count)
-    const unitPrice = Number(body.unitPrice)
-    const total = qty * unitPrice
 
-    const { data: batch, error } = await ctx.supabase
-      .from('poultry_batches')
-      .insert({
-        farm_id: ctx.farmId,
-        name: body.name,
-        breed: body.breed, // stored as-typed ("Sasso"), matching the spec's display
-        source: body.source,
-        count: qty,
-        unit_price: unitPrice,
-        deploy_date: body.date,
-      })
-      .select()
-      .single()
-    if (error) throw error
-
-    const { error: finErr } = await ctx.supabase.from('finance_transactions').insert({
-      farm_id: ctx.farmId,
-      type: 'EXPENSE',
-      category: 'Initial Stock/Purchase',
-      description: `Purchase: Poultry Batch ${body.name} (Source: ${body.source})`,
-      qty,
-      unit_price: unitPrice,
-      amount: total,
-      unit_label: 'birds',
-      source_type: 'POULTRY',
-      source_ref_id: batch.id,
-      date: new Date(body.date).toISOString(),
+    // Single transactional call: the batch and its purchase expense commit
+    // together or not at all. Two separate inserts here used to be able to leave
+    // a committed batch with no expense while the caller saw an outright failure.
+    const { data: batch, error } = await ctx.supabase.rpc('deploy_poultry_batch', {
+      p_name: body.name,
+      p_breed: body.breed, // stored as-typed ("Sasso"), matching the spec's display
+      p_source: body.source,
+      p_count: Number(body.count),
+      p_unit_price: Number(body.unitPrice),
+      p_date: body.date,
     })
-    if (finErr) throw finErr
+    if (error) throw error
 
     return json(batch)
   }
