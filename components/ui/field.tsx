@@ -31,11 +31,19 @@ export function InputRow({ children }: { children: ReactNode }) {
 }
 
 // The dashed-border live-math preview box (veg stems/cost, revenue total).
-export function CalcPreview({ tone = "primary", children }: { tone?: "primary" | "accent"; children: ReactNode }) {
+export function CalcPreview({
+  tone = "primary",
+  children,
+}: {
+  tone?: "primary" | "accent" | "danger";
+  children: ReactNode;
+}) {
   const toneClass =
     tone === "accent"
       ? "border-accent bg-accent/10 [&_span]:text-accent"
-      : "border-primary bg-primary/10 [&_span]:text-primary";
+      : tone === "danger"
+        ? "border-danger bg-danger/10 [&_span]:text-danger"
+        : "border-primary bg-primary/10 [&_span]:text-primary";
   return (
     <div className={`mb-5 rounded-lg border border-dashed p-3 text-[0.85rem] ${toneClass} [&_span]:font-bold`}>
       {children}

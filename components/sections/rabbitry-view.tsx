@@ -19,6 +19,7 @@ interface Rabbit {
   sex: string;
   source: string;
   price: number;
+  soldAt: string | null;
 }
 
 export function RabbitryView() {
@@ -35,6 +36,7 @@ export function RabbitryView() {
     sex: r.sex,
     source: r.source,
     price: Number(r.price),
+    soldAt: r.sold_at,
   }));
 
   const columns: Column<Rabbit>[] = [
@@ -43,6 +45,16 @@ export function RabbitryView() {
     { key: "sex", header: "Sex" },
     { key: "source", header: "Source" },
     { key: "price", header: "Price", render: (r) => (r.price || 0).toLocaleString("en-KE") },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) =>
+        r.soldAt ? (
+          <Tag tone="danger">Sold {new Date(r.soldAt).toISOString().split("T")[0]}</Tag>
+        ) : (
+          <Tag tone="success">In Stock</Tag>
+        ),
+    },
     {
       key: "action",
       header: "Action",

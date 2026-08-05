@@ -19,6 +19,7 @@ interface Dog {
   sex: string;
   source: string;
   price: number;
+  soldAt: string | null;
 }
 
 export function CanineView() {
@@ -35,6 +36,7 @@ export function CanineView() {
     sex: d.sex,
     source: d.source,
     price: Number(d.price),
+    soldAt: d.sold_at,
   }));
 
   const columns: Column<Dog>[] = [
@@ -43,6 +45,16 @@ export function CanineView() {
     { key: "sex", header: "Sex" },
     { key: "source", header: "Source" },
     { key: "price", header: "Price", render: (d) => (d.price || 0).toLocaleString("en-KE") },
+    {
+      key: "status",
+      header: "Status",
+      render: (d) =>
+        d.soldAt ? (
+          <Tag tone="danger">Sold {new Date(d.soldAt).toISOString().split("T")[0]}</Tag>
+        ) : (
+          <Tag tone="success">In Stock</Tag>
+        ),
+    },
     {
       key: "action",
       header: "Action",

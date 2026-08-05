@@ -10,7 +10,26 @@ serve(handle(async (req, ctx) => {
       ctx,
     )
     if (error) throw error
-    return json(data)
+
+    // Same merge as the poultry endpoint: `stems` is what was planted, on_hand is
+    // what is left after losses and sales. See poultry/index.ts for the rationale.
+    const { data: stock, error: stockError } = await ctx.supabase.from('vegetable_stock').select('*')
+    if (stockError) throw stockError
+    // deno-lint-ignore no-explicit-any
+    const byUnit = new Map((stock ?? []).map((s: any) => [s.unit_id, s]))
+
+    // deno-lint-ignore no-explicit-any
+    const rows = (data ?? []).map((v: any) => {
+      const s = byUnit.get(v.id)
+      return {
+        ...v,
+        deployed: v.stems,
+        loss: Number(s?.loss ?? 0),
+        sold: Number(s?.sold ?? 0),
+        on_hand: Number(s?.on_hand ?? v.stems),
+      }
+    })
+    return json(rows)
   }
 
   if (req.method === 'POST') {

@@ -10,7 +10,28 @@ serve(handle(async (req, ctx) => {
       ctx,
     )
     if (error) throw error
-    return json(data)
+
+    // Merge the computed balance onto each batch rather than exposing a separate
+    // endpoint: `count` is the deploy count and always has been, so every caller
+    // that wants "how many birds are actually there" needs on_hand alongside it.
+    // Archived batches drop out of the view, hence the fall back to the raw count.
+    const { data: stock, error: stockError } = await ctx.supabase.from('poultry_stock').select('*')
+    if (stockError) throw stockError
+    // deno-lint-ignore no-explicit-any
+    const byBatch = new Map((stock ?? []).map((s: any) => [s.batch_id, s]))
+
+    // deno-lint-ignore no-explicit-any
+    const rows = (data ?? []).map((b: any) => {
+      const s = byBatch.get(b.id)
+      return {
+        ...b,
+        deployed: b.count,
+        mortality: Number(s?.mortality ?? 0),
+        sold: Number(s?.sold ?? 0),
+        on_hand: Number(s?.on_hand ?? b.count),
+      }
+    })
+    return json(rows)
   }
 
   if (req.method === 'POST') {

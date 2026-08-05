@@ -1,14 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { handle, archiveRow, applyArchiveFilter, json, HttpError } from '../_shared/auth.ts'
-import { ExpenseSchema, RevenueSchema } from '../_shared/schemas.ts'
-
-const REVENUE_SOURCE: Record<string, string> = {
-  Poultry: 'POULTRY',
-  Vegetables: 'VEGETABLES',
-  Rabbitry: 'RABBITRY',
-  Canine: 'CANINE',
-  Other: 'OTHER',
-}
+import { handle, applyArchiveFilter, json, requireId, rpcError, HttpError } from '../_shared/auth.ts'
+import { ExpenseSchema, RevenueSchema, REVENUE_SECTOR } from '../_shared/schemas.ts'
 
 serve(handle(async (req, ctx) => {
   if (req.method === 'GET') {
@@ -34,30 +26,23 @@ serve(handle(async (req, ctx) => {
       const parsed = RevenueSchema.safeParse(raw)
       if (!parsed.success) throw new HttpError(400, JSON.stringify(parsed.error.flatten()))
       const b = parsed.data
-      const qty = Number(b.qty)
-      const unitPrice = Number(b.unitPrice)
-      const total = qty * unitPrice
-      const sourceType = REVENUE_SOURCE[b.cat] ?? 'OTHER'
-      const unitLabel = b.cat === 'Vegetables' ? 'stems' : b.cat === 'Poultry' ? 'items' : 'units'
 
-      const { data, error } = await ctx.supabase
-        .from('finance_transactions')
-        .insert({
-          farm_id: ctx.farmId,
-          type: 'REVENUE',
-          category: b.cat,
-          description: b.batch + (b.desc ? ` - ${b.desc}` : ''),
-          qty,
-          unit_price: unitPrice,
-          amount: total,
-          unit_label: unitLabel,
-          source_type: sourceType,
-          source_ref_id: null,
-          date: new Date(b.date).toISOString(),
-        })
-        .select()
-        .single()
-      if (error) throw error
+      // One transactional call instead of a bare insert: the sale, the stock it
+      // draws down and the REVENUE row commit together or not at all, and the
+      // RPC refuses to oversell before either row exists. The unit label is no
+      // longer guessed from the category here — the RPC knows what was sold.
+      const { data, error } = await ctx.supabase.rpc('record_sale', {
+        p_sector: REVENUE_SECTOR[b.cat] ?? 'GENERAL',
+        p_stock_kind: b.stockKind,
+        p_source_ref_id: b.sourceId ?? null,
+        p_qty: Number(b.qty),
+        p_unit_price: Number(b.unitPrice),
+        p_unit_label: b.unitLabel ?? null,
+        p_customer: b.customer || null,
+        p_date: b.date,
+        p_notes: b.desc || null,
+      })
+      if (error) rpcError(error)
       return json(data)
     }
 
@@ -93,7 +78,16 @@ serve(handle(async (req, ctx) => {
     return json(data)
   }
 
-  if (req.method === 'DELETE') return archiveRow(req, ctx, 'finance_transactions')
+  // Not archiveRow: a REVENUE row is one half of a sale and an EXPENSE may be one
+  // half of an input purchase. Archiving the transaction alone would leave the
+  // stock movement standing — the sold birds would never come back.
+  if (req.method === 'DELETE') {
+    const { data, error } = await ctx.supabase.rpc('archive_finance_transaction', {
+      p_id: requireId(req),
+    })
+    if (error) rpcError(error)
+    return json(data)
+  }
 
   throw new HttpError(405, 'Method not allowed')
 }))

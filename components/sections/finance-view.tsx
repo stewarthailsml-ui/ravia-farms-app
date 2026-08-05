@@ -116,7 +116,20 @@ export function FinanceView() {
     {
       key: "action",
       header: "Action",
-      render: (t) => (showArchived ? null : <ArchiveButton id={t.id} queryKey="finance" url="finance" label="X" />),
+      render: (t) =>
+        showArchived ? null : (
+          <ArchiveButton
+            id={t.id}
+            queryKey="finance"
+            url="finance"
+            label="X"
+            // A REVENUE row may be one half of a sale (archive_finance_transaction
+            // restores the stock too); an EXPENSE may be one half of an input
+            // purchase. Both caches are stale the instant the archive succeeds.
+            alsoInvalidate={["sales", "poultry", "eggs", "egg-stock", "vegetables", "rabbits", "dogs", "inputs"]}
+            confirmMessage="Archive this transaction? If it's a sale or a purchase, the linked stock change is reversed too. Nothing is deleted."
+          />
+        ),
     },
   ];
 

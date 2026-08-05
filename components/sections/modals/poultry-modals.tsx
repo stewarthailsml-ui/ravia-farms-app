@@ -112,7 +112,8 @@ export function DeployPoultryBatchModal({ open, onClose }: ModalBaseProps) {
 }
 
 export function EggCollectionModal({ open, onClose }: ModalBaseProps) {
-  const create = useCreate("eggs", "eggs");
+  // Eggs laid feed straight into egg_stock's on-hand balance.
+  const create = useCreate("eggs", "eggs", ["egg-stock"]);
   const { showToast } = useToast();
   const [count, setCount] = useState(0);
   const [date, setDate] = useState(todayISO());
@@ -152,7 +153,8 @@ export function EggCollectionModal({ open, onClose }: ModalBaseProps) {
 }
 
 export function NewIncubationModal({ open, onClose }: ModalBaseProps) {
-  const create = useCreate("incubations", "incubations");
+  // Setting eggs draws down egg_stock's on-hand balance the same way a sale does.
+  const create = useCreate("incubations", "incubations", ["egg-stock"]);
   const { showToast } = useToast();
   const [count, setCount] = useState(0);
   const [date, setDate] = useState(todayISO());
@@ -196,7 +198,8 @@ const POULTRY_ISSUES = ["Gumboro (IBD)", "Newcastle (NCD)", "Coccidiosis", "Fowl
 export function PoultryHealthModal({ open, onClose }: ModalBaseProps) {
   const { data: batches } = usePoultryBatches();
   const { data: profile } = useProfile();
-  const create = useCreate("poultry-health", "poultry-health");
+  // Mortality feeds straight into poultry_stock's on-hand balance for the batch.
+  const create = useCreate("poultry-health", "poultry-health", ["poultry"]);
   const { showToast } = useToast();
 
   const [batchId, setBatchId] = useState("");

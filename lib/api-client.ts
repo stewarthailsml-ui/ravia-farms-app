@@ -111,6 +111,9 @@ export interface FinanceResponse {
   transactions: FinanceTxn[]
 }
 
+// `count` is the deploy count and never changes. Everything a reader actually
+// wants to know about the flock today lives in the computed fields below, merged
+// on from the poultry_stock view by the Edge Function.
 export interface PoultryBatchRow {
   id: string
   name: string
@@ -120,6 +123,10 @@ export interface PoultryBatchRow {
   unit_price: number
   deploy_date: string
   archived_at: string | null
+  deployed: number
+  mortality: number
+  sold: number
+  on_hand: number
 }
 
 export interface EggRecordRow {
@@ -149,6 +156,7 @@ export interface PoultryHealthRow {
   archived_at: string | null
 }
 
+// `stems` is what was planted; on_hand is what is left after losses and sales.
 export interface VegetableUnitRow {
   id: string
   crop_type: string
@@ -158,6 +166,10 @@ export interface VegetableUnitRow {
   stems: number
   deploy_date: string
   archived_at: string | null
+  deployed: number
+  loss: number
+  sold: number
+  on_hand: number
 }
 
 export interface VegetableHealthRow {
@@ -173,6 +185,8 @@ export interface VegetableHealthRow {
   archived_at: string | null
 }
 
+// sold_at, not a decrement: an individual animal's stock is its presence, so a
+// sale is a state change. The record stays for its breeding/health history.
 export interface RabbitRow {
   id: string
   tag_id: string
@@ -182,6 +196,7 @@ export interface RabbitRow {
   price: number
   acquired_date: string
   archived_at: string | null
+  sold_at: string | null
 }
 
 export interface RabbitPairingRow {
@@ -204,6 +219,7 @@ export interface DogRow {
   pedigree: string | null
   acquired_date: string
   archived_at: string | null
+  sold_at: string | null
 }
 
 export interface DogHeatRow {
@@ -267,6 +283,37 @@ export interface InputPurchaseRow {
   finance_txn_id: string | null
   notes: string | null
   archived_at: string | null
+}
+
+// ---------- Sales ----------
+// The stock-out ledger. Every row is paired 1:1 with a REVENUE transaction
+// (finance_txn_id), written by record_sale in the same transaction.
+export type StockKind = 'POULTRY_BIRDS' | 'EGGS' | 'VEGETABLE_STEMS' | 'RABBIT' | 'DOG' | 'NONE'
+
+export interface SaleRow {
+  id: string
+  sector: InputSector
+  stock_kind: StockKind
+  source_ref_id: string | null
+  qty: number
+  unit_price: number
+  amount: number
+  unit_label: string
+  customer: string | null
+  date: string
+  finance_txn_id: string | null
+  notes: string | null
+  archived_at: string | null
+}
+
+// From the egg_stock view — farm-wide, since eggs are not tied to a batch.
+// Incubation is netted here because setting eggs genuinely consumes them.
+export interface EggStock {
+  farm_id: string
+  laid: number
+  incubated: number
+  sold: number
+  on_hand: number
 }
 
 export interface InputUsageRow {

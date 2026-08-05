@@ -10,7 +10,13 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { ArchiveButton } from "@/components/ui/archive-button";
 import { ArchivedToggle } from "@/components/ui/archived-toggle";
 import { SILVERLANDS_VAC, POULTRY_MATURATION_DAYS, INCUBATION_DAYS, dayDiff } from "@/lib/constants";
-import { usePoultryBatches, useEggRecords, useIncubations, usePoultryHealth } from "./use-ravia-data";
+import {
+  usePoultryBatches,
+  useEggRecords,
+  useIncubations,
+  usePoultryHealth,
+  useEggStock,
+} from "./use-ravia-data";
 import {
   DeployPoultryBatchModal,
   EggCollectionModal,
@@ -34,6 +40,7 @@ export function PoultryView() {
   const { data: eggs } = useEggRecords();
   const { data: incubations } = useIncubations();
   const { data: health } = usePoultryHealth();
+  const { data: eggStock } = useEggStock();
 
   const [deployOpen, setDeployOpen] = useState(false);
   const [eggOpen, setEggOpen] = useState(false);
@@ -65,7 +72,15 @@ export function PoultryView() {
     {
       key: "archive",
       header: "",
-      render: (h) => <ArchiveButton id={h.id} queryKey="poultry-health" url="poultry-health" label="X" />,
+      render: (h) => (
+        <ArchiveButton
+          id={h.id}
+          queryKey="poultry-health"
+          url="poultry-health"
+          label="X"
+          alsoInvalidate={["poultry"]}
+        />
+      ),
     },
   ];
 
@@ -111,11 +126,20 @@ export function PoultryView() {
                             <small className="text-muted">From: {b.source}</small>
                           </div>
                           <div className="text-right">
-                            <Tag tone="success">{b.count} Birds</Tag>
+                            <Tag tone={b.on_hand <= 0 ? "danger" : "success"}>
+                              {b.on_hand} of {b.deployed} Birds
+                            </Tag>
                             <br />
                             <small>{new Date(b.deploy_date).toISOString().split("T")[0]}</small>
                           </div>
                         </div>
+                        {b.mortality > 0 || b.sold > 0 ? (
+                          <div className="text-[0.75rem] text-muted mb-2">
+                            {b.mortality > 0 ? <span>{b.mortality} lost</span> : null}
+                            {b.mortality > 0 && b.sold > 0 ? " · " : null}
+                            {b.sold > 0 ? <span>{b.sold} sold</span> : null}
+                          </div>
+                        ) : null}
                         <div className="my-3">
                           <ProgressBar value={progress} />
                           <div className="flex justify-between text-[0.75rem] mt-1">
@@ -158,13 +182,20 @@ export function PoultryView() {
             id: "layers",
             label: "Layers & Eggs",
             content: (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <Card title="Egg Collection">
                   <div className="flex justify-between items-center">
                     <span className="text-2xl font-bold">{eggsToday}</span>
                     <Button variant="primary" size="sm" onClick={() => setEggOpen(true)}>
                       Record
                     </Button>
+                  </div>
+                  <small className="text-muted">Collected today</small>
+                </Card>
+                <Card title="Eggs In Stock">
+                  <span className="text-2xl font-bold">{eggStock?.on_hand ?? 0}</span>
+                  <div className="text-[0.75rem] text-muted mt-1">
+                    {eggStock?.laid ?? 0} laid − {eggStock?.incubated ?? 0} incubating − {eggStock?.sold ?? 0} sold
                   </div>
                 </Card>
                 <Card title="Incubation">
@@ -179,7 +210,13 @@ export function PoultryView() {
                         <span>
                           {n.count} Eggs (Day {dayDiff(n.date)}/{INCUBATION_DAYS})
                         </span>
-                        <ArchiveButton id={n.id} queryKey="incubations" url="incubations" label="X" />
+                        <ArchiveButton
+                          id={n.id}
+                          queryKey="incubations"
+                          url="incubations"
+                          label="X"
+                          alsoInvalidate={["egg-stock"]}
+                        />
                       </div>
                     ))
                   )}

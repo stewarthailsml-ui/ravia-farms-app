@@ -49,7 +49,15 @@ export function VegetablesView() {
     {
       key: "archive",
       header: "",
-      render: (h) => <ArchiveButton id={h.id} queryKey="vegetable-health" url="vegetable-health" label="X" />,
+      render: (h) => (
+        <ArchiveButton
+          id={h.id}
+          queryKey="vegetable-health"
+          url="vegetable-health"
+          label="X"
+          alsoInvalidate={["vegetables"]}
+        />
+      ),
     },
   ];
 
@@ -88,7 +96,19 @@ export function VegetablesView() {
                           ) : null}
                         </div>
                         <div className="text-2xl font-bold mt-1">{u.units}</div>
-                        <div className="text-muted text-sm mt-1">Units ({u.units * 84} stems)</div>
+                        <div className="text-muted text-sm mt-1">
+                          Units ·{" "}
+                          <span className={u.on_hand <= 0 ? "text-danger font-semibold" : undefined}>
+                            {u.on_hand} of {u.deployed} stems on hand
+                          </span>
+                        </div>
+                        {u.loss > 0 || u.sold > 0 ? (
+                          <div className="text-[0.7rem] text-muted mt-1">
+                            {u.loss > 0 ? <span>{u.loss} lost</span> : null}
+                            {u.loss > 0 && u.sold > 0 ? " · " : null}
+                            {u.sold > 0 ? <span>{u.sold} sold</span> : null}
+                          </div>
+                        ) : null}
                         <div className="text-[0.7rem] text-muted mt-2">
                           Source: {u.source} | {new Date(u.deploy_date).toISOString().split("T")[0]}
                         </div>

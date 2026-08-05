@@ -21,6 +21,8 @@ import {
   InputsResponse,
   InputPurchaseRow,
   InputUsageRow,
+  SaleRow,
+  EggStock,
 } from "@/lib/api-client";
 import { createClientSupabase } from "@/lib/supabase/client";
 
@@ -150,6 +152,31 @@ export function useInputUsage(archived = false) {
   return useQuery<InputUsageRow[]>({
     queryKey: ["input-usage", { archived }],
     queryFn: () => api.get<InputUsageRow[]>("input-usage", archived ? { archived: "true" } : undefined),
+  });
+}
+
+// ---------- Sales ----------
+// Sales are *created* through the finance endpoint (a sale is the revenue entry
+// — record_sale writes both). This lists the stock-out side of that ledger.
+export function useSales(archived = false) {
+  return useQuery<SaleRow[]>({
+    queryKey: ["sales", { archived }],
+    queryFn: () => api.get<SaleRow[]>("sales", archived ? { archived: "true" } : undefined),
+  });
+}
+
+// Eggs are fungible and farm-wide, so their balance is one row rather than a
+// per-batch column — read straight from the RLS-protected view, like useProfile:
+// there is no domain logic here, so an Edge Function hop would be pure overhead.
+export function useEggStock() {
+  return useQuery<EggStock | null>({
+    queryKey: ["egg-stock"],
+    queryFn: async () => {
+      const supabase = createClientSupabase();
+      const { data, error } = await supabase.from("egg_stock").select("*").maybeSingle();
+      if (error) throw error;
+      return (data as EggStock) ?? null;
+    },
   });
 }
 

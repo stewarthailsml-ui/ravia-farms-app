@@ -132,16 +132,48 @@ export const ExpenseSchema = z.object({
 );
 export type Expense = z.infer<typeof ExpenseSchema>;
 
+// Every revenue entry is a sale, and every sale draws down a real balance —
+// which is why `sourceId` is an id now and not the display string it used to be.
+// STOCK_KINDS mirrors the sales.stock_kind check constraint; 'NONE' is the
+// deliberate escape hatch for money with no inventory behind it (general sales,
+// one-off other income), not a default to fall back into.
+export const STOCK_KINDS = [
+  "POULTRY_BIRDS",
+  "EGGS",
+  "VEGETABLE_STEMS",
+  "RABBIT",
+  "DOG",
+  "NONE",
+] as const;
+export type StockKind = (typeof STOCK_KINDS)[number];
+
 export const RevenueSchema = z.object({
   type: z.literal("revenue").default("revenue"),
   cat: z.enum(["Poultry", "Vegetables", "Rabbitry", "Canine", "Other"]),
-  batch: z.string().min(1),
+  stockKind: z.enum(STOCK_KINDS),
+  // The batch/unit/animal being sold from. Required for everything that has a
+  // balance; EGGS is farm-wide and NONE has no stock, so both leave it empty.
+  sourceId: z.string().optional(),
   qty: z.coerce.number().positive(),
   unitPrice: z.coerce.number().min(0),
+  unitLabel: z.string().optional(),
+  customer: z.string().optional().default(""),
   desc: z.string().optional().default(""),
   date: dateString,
-});
+}).refine(
+  (v) => ["EGGS", "NONE"].includes(v.stockKind) || Boolean(v.sourceId),
+  { message: "Select the batch, unit or animal this sale came from" },
+);
 export type Revenue = z.infer<typeof RevenueSchema>;
+
+// Sector, not the display label: what the sales table and the stock views key on.
+export const REVENUE_SECTOR: Record<string, string> = {
+  Poultry: "POULTRY",
+  Vegetables: "VEGETABLES",
+  Rabbitry: "RABBITRY",
+  Canine: "CANINE",
+  Other: "GENERAL",
+};
 
 // ---------- Inputs & Stock ----------
 export const INPUT_CATEGORIES = ["FEED", "VACCINE", "PESTICIDE", "MEDICAL", "EQUIPMENT", "OTHER"] as const;

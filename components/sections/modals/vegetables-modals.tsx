@@ -106,7 +106,8 @@ const VEG_ISSUES = ["Downy Mildew", "Aphids", "Bacterial Wilt", "Early Blight", 
 export function VegetableHealthModal({ open, onClose }: ModalBaseProps) {
   const { data: units } = useVegetableUnits();
   const { data: profile } = useProfile();
-  const create = useCreate("vegetable-health", "vegetable-health");
+  // Loss feeds straight into vegetable_stock's on-hand balance for the unit.
+  const create = useCreate("vegetable-health", "vegetable-health", ["vegetables"]);
   const { showToast } = useToast();
 
   const [unitId, setUnitId] = useState("");
