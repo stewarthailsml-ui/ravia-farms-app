@@ -24,7 +24,14 @@ export default function SignInPage() {
     })
     setLoading(false)
     if (error) {
-      setError("Invalid email or password.");
+      // Only "invalid_credentials" actually means bad password. Collapsing every
+      // failure into that message hides rate limits, unconfirmed emails and
+      // network/config errors, which all look like "my password stopped working".
+      setError(
+        error.code === "invalid_credentials"
+          ? "Invalid email or password."
+          : error.message
+      );
     } else {
       router.push("/")
       router.refresh()
