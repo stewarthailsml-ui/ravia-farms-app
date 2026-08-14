@@ -27,6 +27,12 @@ export const EGGS_PER_TRAY = 30;
 // Stems per vertical garden unit
 export const STEMS_PER_UNIT = 84;
 
+// The crops a vertical unit can be deployed as. Mirrors the enum in the Edge
+// Function's VegetableUnitSchema — server schemas are not shared with the client
+// bundle, so the two are kept in step by hand.
+export const VEGETABLE_CROPS = ["Sukuma Wiki", "Spinach", "Managu", "Kienyeji Mix"] as const;
+export type VegetableCrop = (typeof VEGETABLE_CROPS)[number];
+
 // Poultry maturation cycle (days)
 export const POULTRY_MATURATION_DAYS = 84;
 
@@ -74,6 +80,33 @@ export function dayDiff(d1: string | Date, d2: Date = new Date()): number {
 
 export function todayISO(): string {
   return new Date().toISOString().split("T")[0];
+}
+
+// Human-readable age from an acquisition date. Deliberately coarse: a breeder
+// cares that a doe is "8 mo", not that she is 247 days old. Months are the 30.44
+// day average, so this is an approximation and should not be used for anything
+// that needs exact cycle arithmetic — dayDiff is the primitive for that.
+export function formatAge(date: string | Date): string {
+  const days = Math.max(0, dayDiff(date));
+  if (days < 60) return `${days} d`;
+  const months = Math.floor(days / 30.44);
+  if (months < 24) return `${months} mo`;
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  return rem === 0 ? `${years} yr` : `${years} yr ${rem} mo`;
+}
+
+// Free-text breed fields get typed inconsistently ("New Zealand" vs
+// "new zealand "), which would otherwise split one breed into several rows.
+// Group on the normalised key, display the title-cased form.
+export function normaliseBreedKey(breed: string): string {
+  return breed.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function titleCaseBreed(breed: string): string {
+  const key = normaliseBreedKey(breed);
+  if (!key) return "Unspecified";
+  return key.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function formatDateLong(d: Date = new Date()): string {

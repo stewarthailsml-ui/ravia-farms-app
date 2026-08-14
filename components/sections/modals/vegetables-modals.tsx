@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { FormGroup, TextInput, Select, TextArea, InputRow, CalcPreview, ModalActions } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
-import { todayISO, STEMS_PER_UNIT, formatKES } from "@/lib/constants";
+import { todayISO, STEMS_PER_UNIT, formatKES, VEGETABLE_CROPS, type VegetableCrop } from "@/lib/constants";
 import { googleSearch, googleLens } from "@/lib/google-diagnostics";
 import { uploadHealthPhoto } from "@/lib/supabase/storage";
 import { useCreate, useVegetableUnits, useProfile } from "../use-ravia-data";
@@ -15,14 +15,12 @@ interface ModalBaseProps {
   onClose: () => void;
 }
 
-const CROPS = ["Sukuma Wiki", "Spinach", "Managu", "Kienyeji Mix"] as const;
-
 export function DeployVegetableUnitsModal({ open, onClose }: ModalBaseProps) {
   // Also invalidates "finance": the deploy writes the purchase expense too.
   const create = useCreate("vegetables", "vegetables", ["finance"]);
   const { showToast } = useToast();
   const [form, setForm] = useState({
-    type: "Sukuma Wiki" as (typeof CROPS)[number],
+    type: "Sukuma Wiki" as VegetableCrop,
     source: "",
     units: 1,
     pricePerStem: 5,
@@ -53,7 +51,7 @@ export function DeployVegetableUnitsModal({ open, onClose }: ModalBaseProps) {
       <form onSubmit={onSubmit}>
         <FormGroup label="Crop Type">
           <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as typeof form.type })}>
-            {CROPS.map((c) => (
+            {VEGETABLE_CROPS.map((c) => (
               <option key={c}>{c}</option>
             ))}
           </Select>
