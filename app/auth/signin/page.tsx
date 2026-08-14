@@ -5,6 +5,7 @@ import { createClientSupabase } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -17,24 +18,36 @@ export default function SignInPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const supabase = createClientSupabase()
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    setLoading(false)
-    if (error) {
-      // Only "invalid_credentials" actually means bad password. Collapsing every
-      // failure into that message hides rate limits, unconfirmed emails and
-      // network/config errors, which all look like "my password stopped working".
-      setError(
-        error.code === "invalid_credentials"
-          ? "Invalid email or password."
-          : error.message
-      );
-    } else {
+    try {
+      const supabase = createClientSupabase()
+      const { error } = await supabase.auth.signInWithPassword({
+        // Trim so a trailing space from autofill or a mobile keyboard doesn't
+        // read as a wrong credential. Supabase compares the password verbatim,
+        // so only the surrounding whitespace goes.
+        email: email.trim(),
+        password,
+      })
+      if (error) {
+        // Only "invalid_credentials" actually means bad password. Collapsing every
+        // failure into that message hides rate limits, unconfirmed emails and
+        // network/config errors, which all look like "my password stopped working".
+        setError(
+          error.code === "invalid_credentials"
+            ? "Invalid email or password."
+            : error.message
+        );
+        return;
+      }
       router.push("/")
       router.refresh()
+    } catch (err) {
+      // signInWithPassword only *returns* auth errors; it throws on missing
+      // Supabase env vars and on network/CORS failures. Without this the button
+      // stuck on "Signing in…" forever with nothing shown — indistinguishable
+      // from a rejected password.
+      setError(err instanceof Error ? err.message : "Could not reach the server. Check your connection and try again.");
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -68,12 +81,11 @@ export default function SignInPage() {
               <label className="block mb-2 text-[0.8rem] font-semibold text-muted uppercase">
                 Password
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full p-3 bg-[#1a1a1a] border border-hairline rounded-lg text-white outline-none focus:border-primary"
+                autoComplete="current-password"
               />
             </div>
             {error ? <p className="text-danger text-sm">{error}</p> : null}

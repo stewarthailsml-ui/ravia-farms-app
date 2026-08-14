@@ -5,6 +5,7 @@ import { createClientSupabase } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PasswordInput } from "@/components/ui/password-input";
 
 // Landing page for a staff invite link (see supabase/functions/staff/index.ts's
 // inviteUserByEmail redirectTo). Supabase's browser client detects the session
@@ -73,24 +74,22 @@ export default function SetPasswordPage() {
             <form onSubmit={onSubmit} className="space-y-4">
               <div>
                 <label className="block mb-2 text-[0.8rem] font-semibold text-muted uppercase">Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
-                  className="w-full p-3 bg-[#1a1a1a] border border-hairline rounded-lg text-white outline-none focus:border-primary"
+                  autoComplete="new-password"
                 />
               </div>
               <div>
                 <label className="block mb-2 text-[0.8rem] font-semibold text-muted uppercase">Confirm Password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   required
                   minLength={8}
-                  className="w-full p-3 bg-[#1a1a1a] border border-hairline rounded-lg text-white outline-none focus:border-primary"
+                  autoComplete="new-password"
                 />
               </div>
               {error ? <p className="text-danger text-sm">{error}</p> : null}
