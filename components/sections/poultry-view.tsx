@@ -23,6 +23,7 @@ import {
   NewIncubationModal,
   PoultryHealthModal,
 } from "./modals/poultry-modals";
+import { PoultrySpeciesMap } from "./poultry-species-map";
 
 interface HealthRow {
   id: string;
@@ -95,6 +96,8 @@ export function PoultryView() {
       >
         Poultry Hub
       </SectionHeader>
+
+      <PoultrySpeciesMap />
 
       <Tabs
         tabs={[
