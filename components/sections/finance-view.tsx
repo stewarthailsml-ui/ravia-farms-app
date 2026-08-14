@@ -29,6 +29,17 @@ interface Transaction {
 
 type StockRow = InputStockRow & { id: string };
 
+// `margin` is null rather than 0 for a sector that has spent but never sold —
+// there is no denominator, which is a different fact from "broke even".
+interface SectorPnl {
+  id: string;
+  sector: string;
+  revenue: number;
+  expenses: number;
+  net: number;
+  margin: number | null;
+}
+
 // finance_transactions.source_type predates the sector model and has no
 // 'GENERAL' — purchases map GENERAL onto 'OTHER' on the way in, so it maps back
 // to the same label here. A NULL is a legacy manual expense with no attribution.
@@ -46,6 +57,12 @@ export function FinanceView() {
   const [showArchivedUsage, setShowArchivedUsage] = useState(false);
 
   const { data } = useFinance(showArchived);
+  // Separate, deliberately unparameterised query for the P&L. `data` above is
+  // wired to the Transactions tab's archive toggle, and applyArchiveFilter is
+  // exclusive — archived=true returns *only* archived rows — so sharing it would
+  // let that toggle silently redraw the P&L from retired transactions. React
+  // Query keys these apart, so this is one extra fetch only while the toggle is on.
+  const { data: liveFinance } = useFinance();
   const { data: inputs } = useInputs();
   const { data: purchases } = useInputPurchases(showArchivedPurchases);
   const { data: usage } = useInputUsage(showArchivedUsage);
@@ -73,16 +90,73 @@ export function FinanceView() {
   const net = data?.summary.net ?? 0;
   const netColor = net >= 0 ? "text-primary" : "text-danger";
 
-  // Expenses organised by sector. Derived client-side from the rows already
-  // fetched — the totals are the same numbers the summary card sums, just
+  // ---------- Profit & Loss ----------
+  // Always the live books, never the archive view. Derived client-side from the
+  // rows already fetched — the totals are the same numbers the summary sums, just
   // grouped, so there is nothing for a second endpoint to disagree with.
-  const expensesBySector = transactions
-    .filter((t) => t.type === "expense")
-    .reduce<Record<string, number>>((acc, t) => {
-      acc[t.sector] = (acc[t.sector] ?? 0) + t.amount;
-      return acc;
-    }, {});
-  const sectorRows = Object.entries(expensesBySector).sort((a, b) => b[1] - a[1]);
+  const pnlRevenue = liveFinance?.summary.revenue ?? 0;
+  const pnlExpenses = liveFinance?.summary.expenses ?? 0;
+  const pnlNet = liveFinance?.summary.net ?? 0;
+  const pnlNetColor = pnlNet >= 0 ? "text-primary" : "text-danger";
+  // A farm with costs but no sales yet has no meaningful margin — reporting
+  // -Infinity% (or 0%) would read as a real figure rather than "not applicable".
+  const netMargin = pnlRevenue > 0 ? (pnlNet / pnlRevenue) * 100 : null;
+
+  const bySector = (liveFinance?.transactions ?? []).reduce<
+    Record<string, { revenue: number; expenses: number }>
+  >((acc, t) => {
+    const sector = t.source_type
+      ? (SOURCE_LABELS[t.source_type] ?? t.source_type)
+      : "Unattributed";
+    const row = (acc[sector] ??= { revenue: 0, expenses: 0 });
+    if (t.type === "REVENUE") row.revenue += Number(t.amount);
+    else row.expenses += Number(t.amount);
+    return acc;
+  }, {});
+
+  const pnlRows: SectorPnl[] = Object.entries(bySector)
+    .map(([sector, v]) => ({
+      id: sector,
+      sector,
+      revenue: v.revenue,
+      expenses: v.expenses,
+      net: v.revenue - v.expenses,
+      margin: v.revenue > 0 ? ((v.revenue - v.expenses) / v.revenue) * 100 : null,
+    }))
+    .sort((a, b) => b.revenue - a.revenue || b.expenses - a.expenses);
+
+  const pnlColumns: Column<SectorPnl>[] = [
+    { key: "sector", header: "Sector", render: (r) => <strong>{r.sector}</strong> },
+    {
+      key: "revenue",
+      header: "Revenue",
+      render: (r) => <span className="text-primary">{formatKES(r.revenue)}</span>,
+    },
+    {
+      key: "expenses",
+      header: "Expenses",
+      render: (r) => <span className="text-danger">{formatKES(r.expenses)}</span>,
+    },
+    {
+      key: "net",
+      header: "Net",
+      render: (r) => (
+        <strong className={r.net >= 0 ? "text-primary" : "text-danger"}>{formatKES(r.net)}</strong>
+      ),
+    },
+    {
+      key: "margin",
+      header: "Margin",
+      render: (r) =>
+        r.margin === null ? (
+          <span className="text-muted">—</span>
+        ) : (
+          <span className={r.margin >= 0 ? "text-primary" : "text-danger"}>
+            {r.margin.toFixed(1)}%
+          </span>
+        ),
+    },
+  ];
 
   const columns: Column<Transaction>[] = [
     { key: "date", header: "Date" },
@@ -253,8 +327,8 @@ export function FinanceView() {
         Finance Hub
       </SectionHeader>
 
-      <Card title="Financial Summary">
-        <div className="grid grid-cols-3 gap-4 mb-5">
+      <Card title="Financial Summary" className="mb-6">
+        <div className="grid grid-cols-3 gap-4">
           <div className="bg-[#1a1a1a] rounded-lg p-4 text-center">
             <h4 className="text-[0.7rem] text-muted uppercase">Total Revenue</h4>
             <div className="text-xl font-bold text-primary">{formatKES(revenue)}</div>
@@ -268,24 +342,63 @@ export function FinanceView() {
             <div className={`text-xl font-bold ${netColor}`}>{formatKES(net)}</div>
           </div>
         </div>
-
-        {sectorRows.length > 0 ? (
-          <>
-            <h4 className="text-[0.7rem] text-muted uppercase mb-2 tracking-wide">Expenses by Sector</h4>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {sectorRows.map(([sector, total]) => (
-                <div key={sector} className="bg-[#1a1a1a] rounded-lg p-3 text-center">
-                  <h5 className="text-[0.65rem] text-muted uppercase">{sector}</h5>
-                  <div className="text-base font-bold text-danger">{formatKES(total)}</div>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : null}
       </Card>
 
       <Tabs
         tabs={[
+          {
+            id: "pnl",
+            label: "Profit & Loss",
+            content: (
+              <Card title="Profit & Loss">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-[#1a1a1a] rounded-lg p-4 text-center">
+                    <h4 className="text-[0.7rem] text-muted uppercase">Revenue</h4>
+                    <div className="text-xl font-bold text-primary">{formatKES(pnlRevenue)}</div>
+                  </div>
+                  <div className="bg-[#1a1a1a] rounded-lg p-4 text-center">
+                    <h4 className="text-[0.7rem] text-muted uppercase">Expenses</h4>
+                    <div className="text-xl font-bold text-danger">{formatKES(pnlExpenses)}</div>
+                  </div>
+                  <div className="bg-[#1a1a1a] rounded-lg p-4 text-center">
+                    <h4 className="text-[0.7rem] text-muted uppercase">Net Profit</h4>
+                    <div className={`text-xl font-bold ${pnlNetColor}`}>{formatKES(pnlNet)}</div>
+                  </div>
+                  <div className="bg-[#1a1a1a] rounded-lg p-4 text-center">
+                    <h4 className="text-[0.7rem] text-muted uppercase">Net Margin</h4>
+                    <div className={`text-xl font-bold ${netMargin === null ? "text-muted" : pnlNetColor}`}>
+                      {netMargin === null ? "—" : `${netMargin.toFixed(1)}%`}
+                    </div>
+                  </div>
+                </div>
+
+                <h4 className="text-[0.7rem] text-muted uppercase mb-2 tracking-wide">
+                  Profit &amp; Loss by Sector
+                </h4>
+                <Table
+                  columns={pnlColumns}
+                  rows={pnlRows}
+                  emptyMessage="No transactions yet. Log revenue or an expense to build the P&L."
+                  footer={
+                    pnlRows.length ? (
+                      <tr>
+                        <td className="p-4">ALL SECTORS</td>
+                        <td className="p-4 text-primary">{formatKES(pnlRevenue)}</td>
+                        <td className="p-4 text-danger">{formatKES(pnlExpenses)}</td>
+                        <td className={`p-4 ${pnlNetColor}`}>{formatKES(pnlNet)}</td>
+                        <td className="p-4">{netMargin === null ? "—" : `${netMargin.toFixed(1)}%`}</td>
+                      </tr>
+                    ) : undefined
+                  }
+                />
+
+                <p className="text-[0.7rem] text-muted mt-4">
+                  All-time figures across the live books. Archived transactions are excluded and
+                  are not affected by the archive toggle on the Transactions tab.
+                </p>
+              </Card>
+            ),
+          },
           {
             id: "transactions",
             label: "Transactions",

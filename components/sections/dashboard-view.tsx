@@ -7,7 +7,6 @@ import {
   EGGS_PER_TRAY,
   STEMS_PER_UNIT,
   formatDateLong,
-  formatKES,
   SILVERLANDS_VAC,
   RABBIT_KINDLING_ALERT,
   CANINE_HEAT_ALERT,
@@ -17,11 +16,12 @@ import { exportFarmBackup } from "@/lib/backup";
 import { useToast } from "@/components/ui/toast";
 import { SectionId } from "@/lib/constants";
 import {
-  useFinance,
   usePoultryBatches,
   useVegetableUnits,
   useEggRecords,
+  useRabbits,
   useRabbitPairings,
+  useDogs,
   useDogHeats,
   useProfile,
 } from "./use-ravia-data";
@@ -33,11 +33,12 @@ interface Alert {
 }
 
 export function DashboardView({ onNavigate }: { onNavigate?: (id: SectionId) => void }) {
-  const { data: fin } = useFinance();
   const { data: poultry } = usePoultryBatches();
   const { data: veg } = useVegetableUnits();
   const { data: eggs } = useEggRecords();
+  const { data: rabbits } = useRabbits();
   const { data: pairings } = useRabbitPairings();
+  const { data: dogs } = useDogs();
   const { data: heats } = useDogHeats();
   const { isAdmin } = useProfile();
   const { showToast } = useToast();
@@ -47,12 +48,19 @@ export function DashboardView({ onNavigate }: { onNavigate?: (id: SectionId) => 
   const trays = (eggsToday / EGGS_PER_TRAY).toFixed(1);
 
   const vegUnits = (veg ?? []).reduce((a, b) => a + b.units, 0);
-  const revenue = fin?.summary.revenue ?? 0;
-  const expenses = fin?.summary.expenses ?? 0;
-  const netProfit = fin?.summary.net ?? 0;
 
-  const profitStatus = netProfit >= 0 ? "Profitable" : "Deficit";
-  const profitColor = netProfit >= 0 ? "text-primary" : "text-danger";
+  // Head counts for the overview row. `on_hand` is the live figure the Edge
+  // Function merges from poultry_stock — `count` is the deploy number and never
+  // moves, so summing it would keep counting dead and sold birds.
+  const birdsOnHand = (poultry ?? []).reduce((a, b) => a + Number(b.on_hand), 0);
+  const batchCount = (poultry ?? []).length;
+
+  // A sold rabbit or dog keeps its row — sold_at is a state change, not a
+  // deletion — so presence on the farm is "not archived and not sold".
+  const liveRabbits = (rabbits ?? []).filter((r) => r.sold_at === null);
+  const does = liveRabbits.filter((r) => r.sex.includes("(Female)")).length;
+  const liveDogs = (dogs ?? []).filter((d) => d.sold_at === null);
+  const bitches = liveDogs.filter((d) => d.sex.includes("(Female)")).length;
 
   // Real alert engine — vaccine schedule (±1 day), kindling window (28–31 days),
   // canine heat recurrence window (170–180 days). Previously a single hardcoded entry.
@@ -105,62 +113,81 @@ export function DashboardView({ onNavigate }: { onNavigate?: (id: SectionId) => 
 
       <p className="text-muted text-sm mb-6">{formatDateLong()}</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
-        <StatCard
-          icon={<i className="fas fa-egg" />}
-          label="Eggs Today"
-          value={eggsToday}
-          sub={`${trays} Trays`}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <OverviewTile
+          icon="fa-kiwi-bird"
+          label="Poultry"
+          value={birdsOnHand}
+          sub={`${batchCount} ${batchCount === 1 ? "batch" : "batches"} · ${eggsToday} eggs today (${trays} trays)`}
+          onClick={() => onNavigate?.("poultry")}
         />
-        <StatCard
-          icon={<i className="fas fa-carrot" />}
-          label="Active Stems"
+        <OverviewTile
+          icon="fa-rabbit"
+          label="Rabbits"
+          value={liveRabbits.length}
+          sub={`${does} does · ${liveRabbits.length - does} bucks`}
+          onClick={() => onNavigate?.("rabbits")}
+        />
+        <OverviewTile
+          icon="fa-dog"
+          label="Dogs"
+          value={liveDogs.length}
+          sub={`${bitches} bitches · ${liveDogs.length - bitches} dogs`}
+          onClick={() => onNavigate?.("dogs")}
+        />
+        <OverviewTile
+          icon="fa-carrot"
+          label="Vegetables"
           value={vegUnits * STEMS_PER_UNIT}
-          sub={`${vegUnits} Units`}
-        />
-        <StatCard
-          icon={<i className="fas fa-money-bill-wave" />}
-          label="Net Profit (KES)"
-          value={formatKES(netProfit)}
-          sub={profitStatus}
-          valueClassName={profitColor}
+          sub={`stems across ${vegUnits} ${vegUnits === 1 ? "unit" : "units"}`}
+          onClick={() => onNavigate?.("vegetables")}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-6">
-        <Card title="Recent Tasks & Alerts">
-          {alerts.length ? (
-            alerts.map((a, i) => (
-              <div key={i} className="p-3 border-l-[3px] border-accent bg-[#1a1a1a] rounded mb-2">
-                <Tag tone={a.tone}>{a.title}</Tag>
-                <p className="mt-1 text-sm">{a.message}</p>
-              </div>
-            ))
-          ) : (
-            <p className="text-center text-muted py-6">No urgent alerts.</p>
-          )}
-        </Card>
-
-        <Card title="P&L Overview">
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            <div className="bg-[#1a1a1a] rounded-lg p-4 text-center">
-              <h4 className="text-[0.7rem] text-muted uppercase">Revenue</h4>
-              <div className="text-xl font-bold">{formatKES(revenue)}</div>
+      <Card title="Recent Tasks & Alerts">
+        {alerts.length ? (
+          alerts.map((a, i) => (
+            <div key={i} className="p-3 border-l-[3px] border-accent bg-[#1a1a1a] rounded mb-2">
+              <Tag tone={a.tone}>{a.title}</Tag>
+              <p className="mt-1 text-sm">{a.message}</p>
             </div>
-            <div className="bg-[#1a1a1a] rounded-lg p-4 text-center">
-              <h4 className="text-[0.7rem] text-muted uppercase">Expenses</h4>
-              <div className="text-xl font-bold">{formatKES(expenses)}</div>
-            </div>
-            <div className="bg-[#1a1a1a] rounded-lg p-4 text-center">
-              <h4 className="text-[0.7rem] text-muted uppercase">Net</h4>
-              <div className={`text-xl font-bold ${profitColor}`}>{formatKES(netProfit)}</div>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" className="w-full" onClick={() => onNavigate?.("finance")}>
-            View Details
-          </Button>
-        </Card>
-      </div>
+          ))
+        ) : (
+          <p className="text-center text-muted py-6">No urgent alerts.</p>
+        )}
+      </Card>
     </div>
+  );
+}
+
+// StatCard is a presentational primitive with no click affordance, so the drill-down
+// wraps it rather than widening its props for this one caller.
+function OverviewTile({
+  icon,
+  label,
+  value,
+  sub,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  value: number;
+  sub: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`${label}: ${value}. View section.`}
+      className="text-left rounded-ravia transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      <StatCard
+        icon={<i className={`fas ${icon}`} />}
+        label={label}
+        value={value.toLocaleString()}
+        sub={sub}
+      />
+    </button>
   );
 }
