@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { FormGroup, TextInput, Select, TextArea, InputRow, ModalActions } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
-import { todayISO } from "@/lib/constants";
+import { todayISO, POULTRY_BREEDS, type PoultryBreed } from "@/lib/constants";
 import { googleSearch, googleLens } from "@/lib/google-diagnostics";
 import { uploadHealthPhoto } from "@/lib/supabase/storage";
 import { useCreate, usePoultryBatches, useProfile } from "../use-ravia-data";
@@ -15,15 +15,13 @@ interface ModalBaseProps {
   onClose: () => void;
 }
 
-const BREEDS = ["Sasso", "Kienyeji", "Layers", "Broilers"] as const;
-
 export function DeployPoultryBatchModal({ open, onClose }: ModalBaseProps) {
   // Also invalidates "finance": the deploy writes the purchase expense too.
   const create = useCreate("poultry", "poultry", ["finance"]);
   const { showToast } = useToast();
   const [form, setForm] = useState({
     name: "",
-    breed: "Sasso" as (typeof BREEDS)[number],
+    breed: "Sasso" as PoultryBreed,
     source: "",
     count: 50,
     unitPrice: 110,
@@ -59,7 +57,7 @@ export function DeployPoultryBatchModal({ open, onClose }: ModalBaseProps) {
         </FormGroup>
         <FormGroup label="Breed Type">
           <Select value={form.breed} onChange={(e) => setForm({ ...form, breed: e.target.value as typeof form.breed })}>
-            {BREEDS.map((b) => (
+            {POULTRY_BREEDS.map((b) => (
               <option key={b}>{b}</option>
             ))}
           </Select>

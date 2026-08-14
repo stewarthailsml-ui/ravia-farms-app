@@ -30,6 +30,13 @@ export const STEMS_PER_UNIT = 84;
 // Poultry maturation cycle (days)
 export const POULTRY_MATURATION_DAYS = 84;
 
+// The breeds a batch can be deployed as. Mirrors the enum in the Edge Function's
+// PoultryBatchSchema — server schemas are not shared with the client bundle, so
+// the two are kept in step by hand. Anything reading breeds on the client should
+// import this rather than re-declaring the list.
+export const POULTRY_BREEDS = ["Sasso", "Kienyeji", "Layers", "Broilers"] as const;
+export type PoultryBreed = (typeof POULTRY_BREEDS)[number];
+
 // Silverlands vaccination schedule (day -> task)
 export const SILVERLANDS_VAC: { day: number; task: string }[] = [
   { day: 0, task: "Mareks, NCD+IB" },
