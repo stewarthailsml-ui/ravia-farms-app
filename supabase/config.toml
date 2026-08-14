@@ -37,6 +37,9 @@ verify_jwt = false
 [functions.input-usage]
 verify_jwt = false
 
+[functions.sales]
+verify_jwt = false
+
 [api.tls]
 # Enable HTTPS endpoints locally using a self-signed certificate.
 enabled = false

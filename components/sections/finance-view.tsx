@@ -9,8 +9,8 @@ import { Tag } from "@/components/ui/tag";
 import { ArchiveButton } from "@/components/ui/archive-button";
 import { ArchivedToggle } from "@/components/ui/archived-toggle";
 import { formatKES } from "@/lib/constants";
-import { InputPurchaseRow, InputStockRow, InputUsageRow } from "@/lib/api-client";
-import { useFinance, useInputs, useInputPurchases, useInputUsage } from "./use-ravia-data";
+import { InputPurchaseRow, InputStockRow, InputUsageRow, SaleRow } from "@/lib/api-client";
+import { useFinance, useInputs, useInputPurchases, useInputUsage, useSales } from "./use-ravia-data";
 import { LogExpenseModal, LogRevenueModal } from "./modals/finance-modals";
 import { LogPurchaseModal, LogUsageModal, INPUT_CATEGORY_LABELS, SECTOR_LABELS } from "./modals/inputs-modals";
 
@@ -51,10 +51,15 @@ const SOURCE_LABELS: Record<string, string> = {
   OTHER: "General / Farm-wide",
 };
 
+// SaleRow.sector is InputSector — reuse SECTOR_LABELS (already imported below
+// from inputs-modals.tsx) rather than SOURCE_LABELS above, which is keyed on
+// finance_transactions.source_type's older 'OTHER' instead of 'GENERAL'.
+
 export function FinanceView() {
   const [showArchived, setShowArchived] = useState(false);
   const [showArchivedPurchases, setShowArchivedPurchases] = useState(false);
   const [showArchivedUsage, setShowArchivedUsage] = useState(false);
+  const [showArchivedSales, setShowArchivedSales] = useState(false);
 
   const { data } = useFinance(showArchived);
   // Separate, deliberately unparameterised query for the P&L. `data` above is
@@ -66,6 +71,7 @@ export function FinanceView() {
   const { data: inputs } = useInputs();
   const { data: purchases } = useInputPurchases(showArchivedPurchases);
   const { data: usage } = useInputUsage(showArchivedUsage);
+  const { data: sales } = useSales(showArchivedSales);
 
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [revenueOpen, setRevenueOpen] = useState(false);
@@ -304,6 +310,49 @@ export function FinanceView() {
     },
   ];
 
+  // The itemized stock-out ledger record_sale writes — Transactions shows the
+  // REVENUE half with a human description; this shows the physical movement
+  // (what left, to whom) that produced it. Every sale amount rolls up into the
+  // same Revenue total shown above, since record_sale is the only path a
+  // REVENUE row can be created through.
+  const salesColumns: Column<SaleRow>[] = [
+    { key: "date", header: "Date" },
+    { key: "sector", header: "Sector", render: (s) => SECTOR_LABELS[s.sector] ?? s.sector },
+    {
+      key: "movement",
+      header: "Stock Sold",
+      // sector + unit_label already disambiguate every case on their own — a
+      // rabbit and a dog sale both carry unit_label "animal", but sector reads
+      // "Rabbitry" vs "Canine" right next to it, so a separate stock_kind label
+      // would only repeat what's already on the row.
+      render: (s) => (
+        <>
+          <span className="text-primary text-[0.7rem] font-medium">
+            {Number(s.qty).toLocaleString()} {s.unit_label}
+          </span>
+          {s.notes ? <span className="block text-[0.7rem] text-muted mt-0.5">{s.notes}</span> : null}
+        </>
+      ),
+    },
+    { key: "customer", header: "Customer", render: (s) => s.customer || "—" },
+    { key: "amount", header: "Amount (KES)", className: "font-bold", render: (s) => formatKES(Number(s.amount)) },
+    {
+      key: "action",
+      header: "Action",
+      render: (s) =>
+        showArchivedSales ? null : (
+          <ArchiveButton
+            id={s.id}
+            queryKey="sales"
+            url="sales"
+            label="X"
+            alsoInvalidate={["finance", "poultry", "eggs", "egg-stock", "vegetables", "rabbits", "dogs"]}
+            confirmMessage="Archive this sale? The linked revenue is removed and the stock it drew down is restored. Nothing is deleted."
+          />
+        ),
+    },
+  ];
+
   return (
     <div>
       <SectionHeader
@@ -419,6 +468,35 @@ export function FinanceView() {
                       <td className="p-4">{formatKES(expenses)}</td>
                       <td />
                     </tr>
+                  }
+                />
+              </Card>
+            ),
+          },
+          {
+            id: "sales",
+            label: "Sales",
+            content: (
+              <Card title="Sales Ledger">
+                <div className="flex justify-end mb-3">
+                  <ArchivedToggle checked={showArchivedSales} onChange={setShowArchivedSales} />
+                </div>
+                <Table
+                  columns={salesColumns}
+                  rows={sales ?? []}
+                  emptyMessage="No sales recorded yet. Selling stock through Log Revenue lists it here."
+                  footer={
+                    (sales ?? []).length ? (
+                      <tr>
+                        <td colSpan={3} className="p-4">
+                          TOTAL SALES
+                        </td>
+                        <td className="p-4">
+                          {formatKES((sales ?? []).reduce((a, s) => a + Number(s.amount), 0))}
+                        </td>
+                        <td />
+                      </tr>
+                    ) : undefined
                   }
                 />
               </Card>
