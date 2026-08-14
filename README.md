@@ -7,9 +7,13 @@ farm in Kenya. It tracks four production verticals — **poultry, vertical veget
 canine breeding** — and ties every operational action back to a single **profit-and-loss engine** so the
 farmer always knows whether the farm is profitable, by how much (in KES), and what needs attention today.
 
-This repository currently contains the **frontend prototype** (`index.html`): a self-contained, offline-capable
-single-page app that persists all data to the browser's `localStorage`. The long-term goal is to evolve it
-into a multi-user, cloud-backed full-stack product (see [`ROADMAP.md`](./ROADMAP.md)).
+This repository contains the **full-stack application**: a Next.js 14 (App Router) frontend backed by
+Supabase — Postgres with row-level security, Auth, Storage, and Deno Edge Functions. It ships as an
+installable PWA so it keeps working on a phone with patchy connectivity in the field.
+
+> The original single-file `index.html` prototype that Phase 1 was built from has been removed. It served
+> its purpose — bringing the UI to life — and was frozen at the first commit, so keeping it around only
+> invited confusion about which surface was live. Its history is still in git if you need it.
 
 ---
 
@@ -28,7 +32,7 @@ into a multi-user, cloud-backed full-stack product (see [`ROADMAP.md`](./ROADMAP
 - [Domain Rules (Hard-Coded Business Logic)](#domain-rules-hard-coded-business-logic)
 - [Design System](#design-system)
 - [Current Architecture](#current-architecture)
-- [Getting Started (Run the Prototype)](#getting-started-run-the-prototype)
+- [Getting Started](#getting-started)
 - [Data & Privacy Notes](#data--privacy-notes)
 - [Roadmap](#roadmap)
 - [Tech Stack Recommendation](#tech-stack-recommendation)
@@ -57,27 +61,33 @@ it's revenue tied back to that batch.
 
 | Persona | Primary Need | How Ravia Farms Helps |
 |---|---|---|
-| **Owner / Manager** | Whole-farm financial visibility | Dashboard P&L, net profit in KES, section-level breakdowns, alerts. |
+| **Owner / Manager** | Whole-farm financial visibility | Finance Hub P&L, net profit and margin in KES, per-sector breakdowns, dashboard alerts. |
 | **Farm Hand (field)** | Quick logging while working | Mobile-friendly modals, camera capture for health proof, tap-to-log eggs/incidents. |
 | **Breeder** | Reproduction cycle tracking | Rabbit kindling forecast (31-day), canine heat-cycle recurrence (180-day). |
 | **Vet / Health lead** | Disease & mortality oversight | Per-section health logs, symptom/visual-ID links, photo evidence. |
 | **(Future) Multi-farm / Co-op** | Shared, audited records | Cloud backend, roles, multi-tenant farms (roadmap). |
 
 **Intended environment:** a phone or tablet in the field (often with patchy connectivity) plus a desktop
-for analysis. This is why the prototype is offline-first via `localStorage`. The full-stack version keeps
-that resilience through a Progressive Web App (PWA) with sync.
+for analysis. This is why the app ships as a Progressive Web App with a service worker and an offline
+banner, rather than assuming a live connection.
 
 ---
 
 ## Feature Reference
 
 ### 1. Dashboard
-- **Stat cards:** Eggs collected today (+ tray conversion), active vegetable stems, net profit (KES).
+- **Livestock overview:** four stat cards counting what is on the farm right now — poultry birds on hand
+  (plus batches and eggs collected today), rabbits (does / bucks), dogs (bitches / dogs), and vegetable
+  stems (across N units). Each card taps through to its section.
 - **Recent Tasks & Alerts feed:** auto-generated from batch ages and breeding cycles
   (vaccination windows, kindling due, repeat heat cycles).
-- **P&L Overview:** Revenue / Expenses / Net, one tap from the dashboard into the Finance Hub.
+- **No financial figures.** Money lives in the Finance Hub; the dashboard answers *what is on the farm*,
+  not *what did it earn*.
 
 ### 2. Poultry Hub
+- **Species Deployed:** flock composition by breed — birds on hand, share of the flock, and the
+  deployed / mortality / sold figures behind each bar. Breeds at zero still show, so the card answers
+  "are we running any Broilers?" as readily as "how many Sasso?".
 - **Batch deployment:** name/ID, breed (Sasso / Kienyeji / Layers / Broilers), supplier, bird count,
   unit price, deploy date. Deploying a batch **auto-logs the purchase as an expense**.
 - **Maturation tracker:** 84-day cycle progress bar per batch.
@@ -114,52 +124,64 @@ that resilience through a Progressive Web App (PWA) with sync.
 - **Revenue logging (V6.3 dynamic hub):** choose a source *type* (Poultry / Vegetables / Rabbitry /
   Canine / Other); the *Source Batch/Item* dropdown auto-aggregates live batch names from that sector;
   quantity × unit price computes total revenue in real time.
+- **Profit & Loss tab:** Revenue, Expenses, Net and **Net Margin**, plus a per-sector table putting
+  revenue against expenses with a margin column. A sector that has spent but never sold shows `—`, not
+  `0%` — there is no denominator, which is a different fact from breaking even. The tab always reads the
+  live books and is unaffected by the archive toggle on the Transactions tab.
 - **P&L engine:** Total Revenue − Total Expenses = Net Cash Flow, with color-coded profit/loss.
 - **Transaction history:** date, type, category, human-readable breakdown
-  (`[Qty] [unit] @ [Price] = [Total]`), amount, delete. Grand-total expense footer row.
-- **Backup:** one-click JSON export of the entire state.
+  (`[Qty] [unit] @ [Price] = [Total]`), amount, archive. Grand-total expense footer row.
+- **Inputs & Stock / Purchases / Usage Log:** input catalog with computed stock balances, purchase
+  history (each auto-posting an expense), and consumption logging.
+- **Backup:** one-click JSON export of the whole farm, generated server-side.
 
 ---
 
 ## Core Data Model
 
-The prototype keeps everything in a single `state` object (localStorage key `raviaFarmsV6_2`):
+Everything lives in Postgres, defined by the migrations in [`supabase/migrations/`](./supabase/migrations/)
+and scoped to a **farm** with row-level security:
 
 ```
-state = {
-  sassoBatches:  [{ name, source, date, qty, unitPrice, breed, count }]
-  layersEggs:    [{ count, date }]
-  incubation:    [{ count, date }]
-  poultryHealth: [{ date, batch, issue, affected, mortality, rx, photo? }]
-  vegBatches:    [{ type, source, date, units, pricePerStem, stems }]
-  vegHealth:     [{ date, batch, issue, affected, loss, rx, photo? }]
-  rabbits:       [{ name, source, date, price, breed, sex }]
-  pairings:      [{ doe, buck, date }]
-  dogs:          [{ name, source, price, breed, sex, pedigree }]
-  heats:         [{ name, date }]
-  finance:       [{ type, cat, desc, qty, unitPrice, amount, date, unitLabel }]
-}
+farms ──┬─ users                (farm_id, role: OWNER | MANAGER | FARM_HAND | VET)
+        ├─ poultry_batches      ── poultry_health, egg_records, incubations
+        ├─ vegetable_units      ── vegetable_health
+        ├─ rabbits              ── rabbit_pairings
+        ├─ dogs                 ── dog_heats
+        ├─ input_items          ── input_purchases, input_usage
+        ├─ sales
+        └─ finance_transactions (type, category, amount, source_type, source_ref_id)
 ```
 
-This flat, array-based shape is the natural seed for a normalized relational schema
-(see ROADMAP → *Data Model Migration*).
+Two invariants worth knowing before you touch the schema:
+
+- **Nothing is ever hard-deleted.** Every table carries `archived_at`; "delete" sets it. The archive
+  filter is *exclusive* — asking for archived rows returns only those, never a union.
+- **Balances are computed, never stored.** `poultry_stock`, `vegetable_stock`, `egg_stock` and
+  `input_stock` are `security_invoker` views deriving on-hand from deploys minus mortality minus sales.
+  A batch's `count` is its deploy number and never moves.
 
 ---
 
 ## Domain Rules (Hard-Coded Business Logic)
 
-These constants live in the prototype and must be preserved (and later made configurable) in the full-stack build:
+These constants live in [`lib/constants.ts`](./lib/constants.ts) and should be made configurable per farm
+rather than re-hardcoded elsewhere:
 
-| Rule | Value | Location |
+| Rule | Value | Constant |
 |---|---|---|
-| Eggs per tray | 30 | `renderDashboard()` |
-| Stems per vertical unit | 84 | `calculateVegDeployment()` |
-| Poultry maturation cycle | 84 days | `renderPoultry()` |
+| Eggs per tray | 30 | `EGGS_PER_TRAY` |
+| Stems per vertical unit | 84 | `STEMS_PER_UNIT` |
+| Poultry maturation cycle | 84 days | `POULTRY_MATURATION_DAYS` |
+| Poultry breeds | Sasso / Kienyeji / Layers / Broilers | `POULTRY_BREEDS` |
 | Silverlands vaccine days | 0, 12, 14, 21, 28, 42 | `SILVERLANDS_VAC` |
-| Incubation window | 21 days | `renderPoultry()` |
-| Rabbit kindling | 31 days (alert 28–31) | `renderRabbits()` |
-| Canine heat recurrence | 180 days (alert 170–180) | `renderDogs()` |
-| Currency / locale | KES / `en-KE` | throughout |
+| Incubation window | 21 days | `INCUBATION_DAYS` |
+| Rabbit kindling | 31 days (alert 28–31) | `RABBIT_KINDLING_DAYS` / `_ALERT` |
+| Canine heat recurrence | 180 days (alert 170–180) | `CANINE_HEAT_DAYS` / `_ALERT` |
+| Currency / locale | KES / `en-KE` | `CURRENCY` / `LOCALE` |
+
+> `POULTRY_BREEDS` is mirrored by a Zod enum in `supabase/functions/_shared/schemas.ts`. Edge Functions
+> do not share the client bundle, so the two copies are kept in step by hand — change both.
 
 ---
 
@@ -179,66 +201,76 @@ These constants live in the prototype and must be preserved (and later made conf
 ## Current Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│  Browser (single index.html)                 │
-│  ├─ HTML structure (sidebar + sections)       │
-│  ├─ CSS (design system, all inline <style>)   │
-│  └─ Vanilla JS                                │
-│       ├─ state object (in-memory)             │
-│       ├─ localStorage persistence             │
-│       ├─ render*() functions (DOM updates)    │
-│       └─ form handlers (CRUD + auto-expense)  │
-└─────────────────────────────────────────────┘
-         │
-         └─ persists to: localStorage["raviaFarmsV6_2"]
+┌──────────────────────────────────────────────────────┐
+│  Next.js 14 App Router (React 18, TS strict, Tailwind) │
+│  ├─ middleware.ts            auth gate                 │
+│  ├─ DashboardShell           sidebar + section switch   │
+│  ├─ components/sections/*    one view per sector        │
+│  ├─ components/ui/*          hand-rolled primitives     │
+│  └─ TanStack Query           cache + invalidation       │
+└──────────────────────────────────────────────────────┘
+         │  lib/api-client.ts  (fetch wrapper)
+         ▼
+┌──────────────────────────────────────────────────────┐
+│  Supabase Edge Functions (Deno) — one per resource     │
+│  Zod validation, farm scoping, atomic deploy RPCs      │
+└──────────────────────────────────────────────────────┘
+         ▼
+   Postgres + RLS · Auth · Storage (health photos)
 ```
 
-- **No backend, no network, no accounts.** Single user, single device, single farm.
-- **Persistence:** `localStorage` JSON blob. Export = download JSON.
-- **Limitations:** data is trapped on one browser/device, no sharing, no backups beyond manual export,
-  no validation/server authority, no multi-user, no real photos stored (only base64 previews in memory).
+- **Routing quirk:** there are only three real routes. `app/(dashboard)/page.tsx` renders nothing —
+  `DashboardShell` switches sections by `useState`, so **adding a section means adding a `SectionId`, not
+  a route file**: `lib/constants.ts`, `components/layout/sidebar.tsx`, and the switch in
+  `components/sections/dashboard-section.tsx`.
+- **Writes go through Edge Functions**, never straight to the table, so validation and the auto-expense
+  pairing stay server-side. Deploying a batch and booking its expense is one atomic RPC.
+- **Two reads bypass this** and hit RLS views directly: `useProfile` and `useEggStock`.
+- **No chart or map library.** Visuals are hand-rolled from `ProgressBar` and Tailwind; keep it that way
+  unless a dependency genuinely earns its bundle cost.
 
 ---
 
-## Getting Started (Run the Prototype)
-
-No build step required — it is a static file.
+## Getting Started
 
 ```bash
-# Option A: just open it
-open index.html                # macOS
-xdg-open index.html            # Linux
-start index.html               # Windows (PowerShell)
-
-# Option B: serve it (recommended, avoids file:// quirks)
-# from the project root:
-python3 -m http.server 5173    # then visit http://localhost:5173
-# or
-npx serve .
+npm install
+cp .env.example .env.local     # fill in your Supabase URL + anon key
+npm run dev                    # http://localhost:3000
 ```
 
-**First run:** the app initializes an empty `state`, defaults all date fields to today, and renders the
-dashboard. Use the colored **DEPLOY / REGISTER / LOG** buttons to add data; everything auto-saves to
-`localStorage`. Use **Backup** (top-right of Dashboard) to export a JSON snapshot.
+Useful checks:
 
-> To inspect/reset data: DevTools → Application → Local Storage → key `raviaFarmsV6_2`. Delete the key to reset.
+```bash
+npx tsc --noEmit               # strict typecheck
+npm run build                  # production build
+```
+
+**Sign in** with the seeded owner from [`supabase/seed.sql`](./supabase/seed.sql) —
+`owner@ravia.farm` / `ravia1234`. The seed creates a user and a farm and **no livestock or transactions**,
+so a fresh database shows zeros everywhere until you deploy a batch and log something.
+
+> **Not seeing your changes in `npm run dev`?** The service worker in `public/sw.js` is cache-first for
+> static assets under a fixed cache name, and dev chunk filenames are stable, so it can keep serving a
+> stale bundle. Fix: DevTools → Application → Service Workers → *Unregister*, then hard-reload. Bump the
+> `CACHE` constant if you change the shell.
 
 ---
 
 ## Data & Privacy Notes
 
-- All prototype data stays on the user's device. Nothing is transmitted.
-- Photo "proof" is read as a base64 data URL and is **not** currently persisted (it lives only in the
-  open modal preview). The full-stack version must move photos to object storage.
-- The embedded `<script type="application/x-goose-prd">` block is the original product-requirements
-  document (PRD) for V6.3 and is kept in-file for reference.
+- Farm data lives in Supabase Postgres and is isolated per farm by row-level security. A user only ever
+  sees rows for the farm their profile points at.
+- Health "proof" photos go to Supabase Storage; the row keeps a `photo_url`.
+- Nothing is hard-deleted, so an archived record remains recoverable and auditable. Treat archiving as
+  the delete affordance in the UI.
 
 ---
 
 ## Roadmap
 
-The full plan to turn this prototype into a production full-stack product — phased, with the recommended
-tech stack, data-model migration, and deployment — lives in **[`ROADMAP.md`](./ROADMAP.md)**.
+The phased plan that took this from prototype to production — with data-model migration and deployment —
+lives in **[`ROADMAP.md`](./ROADMAP.md)**. Phases 1–3 are done; the prototype it started from is gone.
 
 High-level phases:
 
@@ -250,29 +282,30 @@ High-level phases:
 
 ---
 
-## Tech Stack Recommendation
+## Tech Stack
 
-**Chosen: Neon (serverless Postgres) + Vercel (Next.js), single deploy.** Full rationale and versioned
-choices are in [`ROADMAP.md`](./ROADMAP.md) → *Tech Stack*. Summary:
+What is actually built. (`ROADMAP.md` records an earlier *recommendation* — Neon + Prisma + Auth.js +
+shadcn/ui — that was **not** the route taken. Supabase replaced it; read that section as history.)
 
-- **App:** Next.js (App Router, TypeScript) + Tailwind CSS + shadcn/ui, shipped as a **PWA** for offline
-  field use. Preserves the exact Ravia visual identity. UI + API + Cron in one Vercel project.
-- **Data:** Prisma ORM → **Neon Postgres** (serverless, scales to zero, branches per preview deploy).
-- **Server logic:** Next.js Route Handlers + Server Actions (Zod-validated) — no separate API service.
-- **Auth:** Auth.js (NextAuth) Credentials provider with role guards (Owner / Manager / Farm Hand / Vet).
-- **Files:** S3-compatible object storage (Cloudflare R2 / AWS S3) for health photos, via presigned URLs.
-- **Deploy:** Vercel only — frontend, API, and cron in one place; Neon as the database.
+- **App:** Next.js 14 (App Router) + React 18 + TypeScript strict + Tailwind CSS, shipped as a **PWA**.
+- **UI:** hand-rolled primitives in `components/ui/` — no component library. Font Awesome via CDN.
+- **Data:** Supabase Postgres with row-level security. Migrations in `supabase/migrations/`.
+- **Server logic:** Supabase **Edge Functions** (Deno), one per resource, Zod-validated, with plpgsql
+  RPCs for anything that must be atomic (deploy + expense, sale + stock reconciliation).
+- **Client cache:** TanStack Query v5 (`staleTime` 30s), invalidated per mutation.
+- **Auth:** Supabase Auth behind `middleware.ts`, with roles (Owner / Manager / Farm Hand / Vet).
+- **Files:** Supabase Storage for health photos.
 
 ---
 
 ## Contributing
 
-This is an early-stage prototype. When contributing:
-
 - Keep the **Ravia brand colors and fonts** intact.
 - Preserve the **domain constants** (vaccine days, 84-day cycles, 30 eggs/tray, KES) — they are farm
   operating procedure, not arbitrary UI choices.
-- New financial actions must **auto-post to the P&L engine**, matching the existing deploy→expense pattern.
-- Prefer the modal + toast interaction patterns already established in `index.html`.
+- New financial actions must **auto-post to the P&L engine**, matching the existing deploy→expense pattern,
+  and must be atomic — pair the stock row and its transaction in one RPC, never two calls.
+- Reuse the primitives in `components/ui/` and the modal + toast patterns already established there.
+- Run `npx tsc --noEmit` before opening a PR.
 
 See [`ROADMAP.md`](./ROADMAP.md) before building new backend functionality.
