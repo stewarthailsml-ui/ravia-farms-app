@@ -14,7 +14,8 @@ interface ModalBaseProps {
 }
 
 export function RegisterRabbitModal({ open, onClose }: ModalBaseProps) {
-  const create = useCreate("rabbits", "rabbits");
+  // Also invalidates "finance": registering a rabbit posts its purchase expense.
+  const create = useCreate("rabbits", "rabbits", ["finance"]);
   const { showToast } = useToast();
   const [form, setForm] = useState({
     name: "",

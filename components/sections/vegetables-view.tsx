@@ -10,6 +10,8 @@ import { ArchiveButton } from "@/components/ui/archive-button";
 import { ArchivedToggle } from "@/components/ui/archived-toggle";
 import { useVegetableUnits, useVegetableHealth } from "./use-ravia-data";
 import { DeployVegetableUnitsModal, VegetableHealthModal } from "./modals/vegetables-modals";
+import { VegetableLotDetailModal } from "./modals/lot-detail-modals";
+import type { VegetableUnitRow } from "@/lib/api-client";
 
 interface HealthRow {
   id: string;
@@ -28,6 +30,12 @@ export function VegetablesView() {
 
   const [deployOpen, setDeployOpen] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
+  // Lot detail: clicking a unit card opens its incident history.
+  const [detailUnitId, setDetailUnitId] = useState<string | null>(null);
+  const [prefillUnitId, setPrefillUnitId] = useState<string | undefined>();
+
+  const detailUnit: VegetableUnitRow | null =
+    (units ?? []).find((u) => u.id === detailUnitId) ?? null;
 
   const healthRows: HealthRow[] = (health ?? []).map((h) => ({
     id: h.id,
@@ -88,7 +96,11 @@ export function VegetablesView() {
                     <p className="text-muted col-span-full py-6">No units deployed yet.</p>
                   ) : (
                     (units ?? []).map((u) => (
-                      <div key={u.id} className="bg-card border border-hairline rounded-ravia shadow-card p-5">
+                      <div
+                          key={u.id}
+                          className="bg-card border border-hairline rounded-ravia shadow-card p-5 cursor-pointer hover:border-primary/60 transition-colors"
+                          onClick={() => setDetailUnitId(u.id)}
+                        >
                         <div className="flex justify-between items-start">
                           <h3 className="text-lg font-semibold">{u.crop_type}</h3>
                           {!showArchived ? (
@@ -140,7 +152,24 @@ export function VegetablesView() {
       />
 
       <DeployVegetableUnitsModal open={deployOpen} onClose={() => setDeployOpen(false)} />
-      <VegetableHealthModal open={healthOpen} onClose={() => setHealthOpen(false)} />
+      {/* Prefilled from a lot card's "log incident for this lot" button. */}
+      <VegetableHealthModal
+        open={healthOpen}
+        onClose={() => {
+          setHealthOpen(false);
+          setPrefillUnitId(undefined);
+        }}
+        prefillUnitId={prefillUnitId}
+      />
+      <VegetableLotDetailModal
+        open={detailUnit !== null}
+        onClose={() => setDetailUnitId(null)}
+        unit={detailUnit}
+        onLogIncident={(unitId) => {
+          setPrefillUnitId(unitId);
+          setHealthOpen(true);
+        }}
+      />
     </div>
   );
 }

@@ -488,7 +488,9 @@ export function FinanceView() {
                   footer={
                     (sales ?? []).length ? (
                       <tr>
-                        <td colSpan={3} className="p-4">
+                        {/* Date + Sector + Stock Sold + Customer = 4; the total
+                            lands under Amount and the action cell stays empty. */}
+                        <td colSpan={4} className="p-4">
                           TOTAL SALES
                         </td>
                         <td className="p-4">

@@ -14,7 +14,8 @@ interface ModalBaseProps {
 }
 
 export function RegisterDogModal({ open, onClose }: ModalBaseProps) {
-  const create = useCreate("dogs", "dogs");
+  // Also invalidates "finance": registering a dog posts its purchase expense.
+  const create = useCreate("dogs", "dogs", ["finance"]);
   const { showToast } = useToast();
   const [form, setForm] = useState({
     name: "",

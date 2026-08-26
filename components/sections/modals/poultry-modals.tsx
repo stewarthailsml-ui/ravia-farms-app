@@ -193,7 +193,14 @@ export function NewIncubationModal({ open, onClose }: ModalBaseProps) {
 
 const POULTRY_ISSUES = ["Gumboro (IBD)", "Newcastle (NCD)", "Coccidiosis", "Fowl Pox", "CRD", "Other"];
 
-export function PoultryHealthModal({ open, onClose }: ModalBaseProps) {
+export function PoultryHealthModal({
+  open,
+  onClose,
+  prefillBatchId,
+}: ModalBaseProps & {
+  /** Preselects the batch when opened from a lot card's "log incident" button. */
+  prefillBatchId?: string;
+}) {
   const { data: batches } = usePoultryBatches();
   const { data: profile } = useProfile();
   // Mortality feeds straight into poultry_stock's on-hand balance for the batch.
@@ -209,9 +216,13 @@ export function PoultryHealthModal({ open, onClose }: ModalBaseProps) {
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
   const [uploading, setUploading] = useState(false);
 
+  // The prefill wins over the blank default while it is set.
+  const effectiveBatchId = batchId || prefillBatchId || "";
   const resolvedIssue = issue === "Other" ? otherIssue : issue;
   const batchLabel =
-    batchId === "" ? "Layers" : batches?.find((b) => b.id === batchId)?.name ?? "Layers";
+    effectiveBatchId === ""
+      ? "Layers"
+      : batches?.find((b) => b.id === effectiveBatchId)?.name ?? "Layers";
 
   function reset() {
     setBatchId("");
@@ -240,7 +251,7 @@ export function PoultryHealthModal({ open, onClose }: ModalBaseProps) {
     e.preventDefault();
     try {
       await create.mutateAsync({
-        batchId: batchId || undefined,
+        batchId: effectiveBatchId || undefined,
         batch: batchLabel,
         issue: resolvedIssue,
         affected,
@@ -260,7 +271,11 @@ export function PoultryHealthModal({ open, onClose }: ModalBaseProps) {
     <Modal open={open} onClose={onClose} title="Poultry Health & Mortality">
       <form onSubmit={onSubmit}>
         <FormGroup label="Source Batch">
-          <Select required value={batchId} onChange={(e) => setBatchId(e.target.value)}>
+          <Select
+            required
+            value={effectiveBatchId}
+            onChange={(e) => setBatchId(e.target.value)}
+          >
             <option value="">Layers (General)</option>
             {(batches ?? []).map((b) => (
               <option key={b.id} value={b.id}>

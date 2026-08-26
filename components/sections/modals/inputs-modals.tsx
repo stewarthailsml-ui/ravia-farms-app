@@ -57,8 +57,8 @@ export function LogPurchaseModal({ open, onClose }: ModalBaseProps) {
   const [date, setDate] = useState(todayISO());
   const [notes, setNotes] = useState("");
 
-  const items = data?.items ?? [];
-  const suppliers = data?.suppliers ?? [];
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const suppliers = useMemo(() => data?.suppliers ?? [], [data]);
   const isNew = itemId === NEW_ITEM;
   const selected = useMemo(() => items.find((i) => i.id === itemId), [items, itemId]);
   const unitLabel = isNew ? newUnitLabel || "units" : (selected?.unit_label ?? "units");
@@ -249,7 +249,7 @@ export function LogUsageModal({ open, onClose }: ModalBaseProps) {
   const create = useCreate("input-usage", "input-usage", ["inputs"]);
   const { showToast } = useToast();
 
-  const stock = data?.stock ?? [];
+  const stock = useMemo(() => data?.stock ?? [], [data]);
   const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState(1);
   const [sector, setSector] = useState<InputSector>("POULTRY");

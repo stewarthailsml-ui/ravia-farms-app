@@ -161,8 +161,9 @@ max_catalogs = 2
 # [storage.analytics.buckets.my-warehouse]
 
 # Store vector embeddings in S3 for large and durable datasets
+# (Pro plan only — keep disabled on free tier; enabling blocks `supabase config push`)
 [storage.vector]
-enabled = true
+enabled = false
 max_buckets = 10
 max_indexes = 5
 
@@ -200,6 +201,9 @@ minimum_password_length = 6
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
+
+# Reject passwords found in real-world data breaches (checked against HaveIBeenPwned).
+enable_leaked_password_protection = true
 
 # Configure passkey sign-ins.
 # [auth.passkey]

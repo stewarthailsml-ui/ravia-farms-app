@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, SectionHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
@@ -9,13 +9,20 @@ import { Table, Column } from "@/components/ui/table";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { ArchiveButton } from "@/components/ui/archive-button";
 import { ArchivedToggle } from "@/components/ui/archived-toggle";
-import { SILVERLANDS_VAC, POULTRY_MATURATION_DAYS, INCUBATION_DAYS, dayDiff } from "@/lib/constants";
+import {
+  SILVERLANDS_VAC,
+  POULTRY_MATURATION_DAYS,
+  INCUBATION_DAYS,
+  dayDiff,
+  vaccineStatus,
+} from "@/lib/constants";
 import {
   usePoultryBatches,
   useEggRecords,
   useIncubations,
   usePoultryHealth,
   useEggStock,
+  useBatchVaccinations,
 } from "./use-ravia-data";
 import {
   DeployPoultryBatchModal,
@@ -23,7 +30,9 @@ import {
   NewIncubationModal,
   PoultryHealthModal,
 } from "./modals/poultry-modals";
+import { PoultryLotDetailModal } from "./modals/lot-detail-modals";
 import { PoultrySpeciesMap } from "./poultry-species-map";
+import type { PoultryBatchRow } from "@/lib/api-client";
 
 interface HealthRow {
   id: string;
@@ -42,11 +51,30 @@ export function PoultryView() {
   const { data: incubations } = useIncubations();
   const { data: health } = usePoultryHealth();
   const { data: eggStock } = useEggStock();
+  const { data: vaccinations } = useBatchVaccinations();
+
+  // Per-batch lookup for the schedule chips on each card.
+  const vacByBatch = useMemo(() => {
+    const m = new Map<string, Map<number, { given_at: string }>>();
+    for (const v of vaccinations ?? []) {
+      if (!v.batch_id) continue;
+      if (!m.has(v.batch_id)) m.set(v.batch_id, new Map());
+      m.get(v.batch_id)!.set(v.sched_day, { given_at: v.given_at });
+    }
+    return m;
+  }, [vaccinations]);
 
   const [deployOpen, setDeployOpen] = useState(false);
   const [eggOpen, setEggOpen] = useState(false);
   const [incOpen, setIncOpen] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
+  // Lot detail: clicking a batch card opens its incidents + vaccination record.
+  const [detailBatchId, setDetailBatchId] = useState<string | null>(null);
+  // The health modal prefilled from "log incident for this lot".
+  const [prefillBatchId, setPrefillBatchId] = useState<string | undefined>();
+
+  const detailBatch: PoultryBatchRow | null =
+    (batches ?? []).find((b) => b.id === detailBatchId) ?? null;
 
   const today = new Date().toISOString().split("T")[0];
   const eggsToday = (eggs ?? [])
@@ -119,8 +147,13 @@ export function PoultryView() {
                   (batches ?? []).map((b) => {
                     const age = dayDiff(b.deploy_date);
                     const progress = Math.min((age / POULTRY_MATURATION_DAYS) * 100, 100);
+                    const vacByDay = vacByBatch.get(b.id) ?? new Map();
                     return (
-                      <Card key={b.id}>
+                      <Card
+                        key={b.id}
+                        className="cursor-pointer hover:border-primary/60 transition-colors"
+                        onClick={() => setDetailBatchId(b.id)}
+                      >
                         <div className="flex justify-between">
                           <div>
                             <h2 className="text-xl font-semibold">
@@ -154,17 +187,63 @@ export function PoultryView() {
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                           {SILVERLANDS_VAC.map((v) => {
-                            const done = age >= v.day;
+                            // Real state from batch_vaccinations, not "old enough".
+                            const status = vaccineStatus(
+                              v.day,
+                              age,
+                              vacByDay.get(v.day)?.given_at ?? null,
+                            );
+                            const tone =
+                              status.state === "done"
+                                ? "success"
+                                : status.state === "overdue"
+                                  ? "danger"
+                                  : status.state === "due"
+                                    ? "warning"
+                                    : "neutral";
                             return (
                               <div
                                 key={v.day}
                                 className={`rounded-md border p-2 text-center ${
-                                  done ? "border-primary bg-primary/5" : "border-hairline bg-[#1a1a1a]"
+                                  status.state === "done"
+                                    ? "border-primary bg-primary/5"
+                                    : status.state === "overdue"
+                                      ? "border-danger bg-danger/10"
+                                      : status.state === "due"
+                                        ? "border-accent bg-accent/10"
+                                        : "border-hairline bg-[#1a1a1a]"
                                 }`}
                               >
-                                <i className={`fas ${done ? "fa-check-circle text-primary" : "fa-clock text-muted"}`} />
+                                <i
+                                  className={`fas ${
+                                    status.state === "done"
+                                      ? "fa-check-circle text-primary"
+                                      : status.state === "overdue"
+                                        ? "fa-exclamation-circle text-danger"
+                                        : status.state === "due"
+                                          ? "fa-bell text-accent"
+                                          : "fa-clock text-muted"
+                                  }`}
+                                />
                                 <h4 className="text-[0.7rem] mt-1">Day {v.day}</h4>
                                 <p className="text-[0.6rem] text-muted">{v.task}</p>
+                                {status.state !== "pending" ? (
+                                  <span
+                                    className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[0.55rem] font-semibold ${
+                                      status.state === "done"
+                                        ? "bg-primary/15 text-primary"
+                                        : status.state === "overdue"
+                                          ? "bg-danger/15 text-danger"
+                                          : "bg-accent/15 text-accent"
+                                    }`}
+                                  >
+                                    {status.state === "done"
+                                      ? "Done"
+                                      : status.state === "overdue"
+                                        ? `Late ${status.daysLate}d`
+                                        : "Due"}
+                                  </span>
+                                ) : null}
                               </div>
                             );
                           })}
@@ -253,7 +332,24 @@ export function PoultryView() {
       <DeployPoultryBatchModal open={deployOpen} onClose={() => setDeployOpen(false)} />
       <EggCollectionModal open={eggOpen} onClose={() => setEggOpen(false)} />
       <NewIncubationModal open={incOpen} onClose={() => setIncOpen(false)} />
-      <PoultryHealthModal open={healthOpen} onClose={() => setHealthOpen(false)} />
+      {/* Prefilled from a lot card's "log incident for this lot" button. */}
+      <PoultryHealthModal
+        open={healthOpen}
+        onClose={() => {
+          setHealthOpen(false);
+          setPrefillBatchId(undefined);
+        }}
+        prefillBatchId={prefillBatchId}
+      />
+      <PoultryLotDetailModal
+        open={detailBatch !== null}
+        onClose={() => setDetailBatchId(null)}
+        batch={detailBatch}
+        onLogIncident={(batchId) => {
+          setPrefillBatchId(batchId);
+          setHealthOpen(true);
+        }}
+      />
     </div>
   );
 }

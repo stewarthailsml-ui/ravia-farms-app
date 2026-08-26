@@ -12,6 +12,7 @@ import {
   RABBIT_KINDLING_ALERT,
   CANINE_HEAT_ALERT,
   dayDiff,
+  vaccineStatus,
 } from "@/lib/constants";
 import { exportFarmBackup } from "@/lib/backup";
 import { useToast } from "@/components/ui/toast";
@@ -28,6 +29,7 @@ import {
   useDogs,
   useDogHeats,
   useProfile,
+  useBatchVaccinations,
 } from "./use-ravia-data";
 import { animalsByBreed, liveAnimals, poultryByBreed, vegetablesByCrop } from "./farm-composition";
 import { RabbitCards, DogCards } from "./dashboard-livestock-cards";
@@ -49,6 +51,7 @@ export function DashboardView({ onNavigate }: { onNavigate?: (id: SectionId) => 
   const { data: pairings } = useRabbitPairings();
   const { data: dogRows } = useDogs();
   const { data: heats } = useDogHeats();
+  const { data: vaccinations } = useBatchVaccinations();
   const { isAdmin } = useProfile();
   const { showToast } = useToast();
 
@@ -84,15 +87,38 @@ export function DashboardView({ onNavigate }: { onNavigate?: (id: SectionId) => 
   });
   const itemsInStock = stockItems.filter((s) => Number(s.on_hand) > 0).length;
 
-  // Real alert engine — vaccine schedule (±1 day), kindling window (28–31 days),
-  // canine heat recurrence window (170–180 days).
+  // Real alert engine — vaccine due/overdue from recorded doses (not the
+  // calendar), kindling window (28–31 days), canine heat recurrence (170–180).
   const alerts: Alert[] = [];
+
+  // Per-batch administered-dose lookup, so a schedule point that was actually
+  // given never raises an alert no matter how old the batch is.
+  const givenByBatch = new Map<string, Set<number>>();
+  for (const v of vaccinations ?? []) {
+    if (!v.batch_id) continue;
+    if (!givenByBatch.has(v.batch_id)) givenByBatch.set(v.batch_id, new Set());
+    givenByBatch.get(v.batch_id)!.add(v.sched_day);
+  }
 
   (poultry ?? []).forEach((b) => {
     const age = dayDiff(b.deploy_date);
+    const given = givenByBatch.get(b.id);
     SILVERLANDS_VAC.forEach((v) => {
-      if (age >= v.day - 1 && age <= v.day + 1) {
-        alerts.push({ title: `Poultry: ${b.name}`, message: `Day ${v.day} Vac: ${v.task}`, tone: "warning" });
+      // Already recorded — never an alert.
+      if (given?.has(v.day)) return;
+      const status = vaccineStatus(v.day, age, null);
+      if (status.state === "due") {
+        alerts.push({
+          title: `Poultry: ${b.name}`,
+          message: `Day ${v.day} vaccine DUE NOW: ${v.task}`,
+          tone: "warning",
+        });
+      } else if (status.state === "overdue") {
+        alerts.push({
+          title: `Poultry: ${b.name}`,
+          message: `Day ${v.day} vaccine OVERDUE by ${status.daysLate} days: ${v.task}`,
+          tone: "danger",
+        });
       }
     });
   });

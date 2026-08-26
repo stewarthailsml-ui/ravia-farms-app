@@ -316,6 +316,20 @@ export interface EggStock {
   on_hand: number
 }
 
+// One administered dose: a Silverlands schedule point actually carried out on a
+// batch. Keyed by (farm_id, batch_id, sched_day) so a point is recorded once.
+export interface BatchVaccinationRow {
+  id: string
+  farm_id: string
+  batch_id: string | null
+  sched_day: number
+  task: string
+  given_at: string
+  notes: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export interface InputUsageRow {
   id: string
   item_id: string

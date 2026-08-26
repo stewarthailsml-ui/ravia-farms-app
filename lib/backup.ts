@@ -18,6 +18,10 @@ export async function exportFarmBackup(): Promise<void> {
     rabbitPairings,
     dogs,
     dogHeats,
+    inputs,
+    inputPurchases,
+    inputUsage,
+    sales,
   ] = await Promise.all([
     api.get("finance"),
     api.get("poultry"),
@@ -30,6 +34,13 @@ export async function exportFarmBackup(): Promise<void> {
     api.get("rabbit-pairings"),
     api.get("dogs"),
     api.get("dog-heats"),
+    // The inputs module (catalog, stock balances, suppliers) and the stock-out
+    // ledger were missing from earlier exports — a restore from one of those
+    // files silently lost every purchase/usage/sale record.
+    api.get("inputs"),
+    api.get("input-purchases"),
+    api.get("input-usage"),
+    api.get("sales"),
   ]);
 
   const payload = {
@@ -45,6 +56,10 @@ export async function exportFarmBackup(): Promise<void> {
     rabbitPairings,
     dogs,
     dogHeats,
+    inputs,
+    inputPurchases,
+    inputUsage,
+    sales,
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });

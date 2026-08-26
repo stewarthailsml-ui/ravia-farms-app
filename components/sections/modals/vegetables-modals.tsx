@@ -101,7 +101,14 @@ export function DeployVegetableUnitsModal({ open, onClose }: ModalBaseProps) {
 
 const VEG_ISSUES = ["Downy Mildew", "Aphids", "Bacterial Wilt", "Early Blight", "Spider Mites", "Other"];
 
-export function VegetableHealthModal({ open, onClose }: ModalBaseProps) {
+export function VegetableHealthModal({
+  open,
+  onClose,
+  prefillUnitId,
+}: ModalBaseProps & {
+  /** Preselects the unit when opened from a lot card's "log incident" button. */
+  prefillUnitId?: string;
+}) {
   const { data: units } = useVegetableUnits();
   const { data: profile } = useProfile();
   // Loss feeds straight into vegetable_stock's on-hand balance for the unit.
@@ -117,8 +124,10 @@ export function VegetableHealthModal({ open, onClose }: ModalBaseProps) {
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
   const [uploading, setUploading] = useState(false);
 
+  // The prefill wins over the blank default while it is set.
+  const effectiveUnitId = unitId || prefillUnitId || "";
   const resolvedIssue = issue === "Other" ? otherIssue : issue;
-  const selectedUnit = units?.find((u) => u.id === unitId);
+  const selectedUnit = units?.find((u) => u.id === effectiveUnitId);
 
   function reset() {
     setUnitId("");
@@ -148,7 +157,7 @@ export function VegetableHealthModal({ open, onClose }: ModalBaseProps) {
     if (!selectedUnit) return;
     try {
       await create.mutateAsync({
-        unitId,
+        unitId: effectiveUnitId,
         batch: `${selectedUnit.crop_type} (${selectedUnit.units} units)`,
         issue: resolvedIssue,
         affected,
@@ -168,7 +177,7 @@ export function VegetableHealthModal({ open, onClose }: ModalBaseProps) {
     <Modal open={open} onClose={onClose} title="Vegetable Health & Loss">
       <form onSubmit={onSubmit}>
         <FormGroup label="Target Batch/Unit">
-          <Select required value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+          <Select required value={effectiveUnitId} onChange={(e) => setUnitId(e.target.value)}>
             <option value="" disabled>
               Select a unit…
             </option>

@@ -23,6 +23,7 @@ import {
   InputUsageRow,
   SaleRow,
   EggStock,
+  BatchVaccinationRow,
 } from "@/lib/api-client";
 import { createClientSupabase } from "@/lib/supabase/client";
 
@@ -216,6 +217,59 @@ export function useArchive(key: string, url: string, alsoInvalidate: string[] = 
         qc.invalidateQueries({ queryKey: [k] });
       }
     },
+  });
+}
+
+// ---------- Vaccinations ----------
+// Read/written straight through PostgREST (like useProfile/useEggStock): there
+// is no domain logic — RLS scopes every row to the farm, and the unique
+// (farm_id, batch_id, sched_day) index rejects a double-recorded dose.
+export function useBatchVaccinations() {
+  return useQuery<BatchVaccinationRow[]>({
+    queryKey: ["batch-vaccinations"],
+    queryFn: async () => {
+      const supabase = createClientSupabase();
+      const { data, error } = await supabase
+        .from("batch_vaccinations")
+        .select("*")
+        .order("given_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as BatchVaccinationRow[];
+    },
+  });
+}
+
+// Records one administered dose. No invalidation of anything beyond its own
+// key today, but "batch-vaccinations" is what the dashboard alert engine reads,
+// so keeping the key name stable matters.
+export function useRecordVaccination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      batchId: string;
+      schedDay: number;
+      task: string;
+      givenAt: string;
+      notes?: string;
+    }) => {
+      const supabase = createClientSupabase();
+      const { data: profile } = await supabase.auth.getUser();
+      const { data: row, error } = await supabase
+        .from("batch_vaccinations")
+        .insert({
+          batch_id: data.batchId,
+          sched_day: data.schedDay,
+          task: data.task,
+          given_at: data.givenAt,
+          notes: data.notes || null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      void profile;
+      return row as BatchVaccinationRow;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["batch-vaccinations"] }),
   });
 }
 

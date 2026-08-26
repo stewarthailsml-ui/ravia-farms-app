@@ -53,6 +53,36 @@ export const SILVERLANDS_VAC: { day: number; task: string }[] = [
   { day: 42, task: "NCD+IB (W)" },
 ];
 
+// How many days past its scheduled day a dose is shown as OVERDUE before it
+// stops being "due". Beyond this the batch has aged out of the brooding window
+// and the alert would be noise rather than a nudge.
+export const VACCINE_OVERDUE_GRACE_DAYS = 14;
+
+export type VaccineStatus =
+  | { state: "done"; givenAt: string }
+  | { state: "due" } // scheduled day reached (or within a day of it), not recorded
+  | { state: "overdue"; daysLate: number }
+  | { state: "pending" }; // scheduled day not yet reached
+
+/**
+ * Resolves one schedule point against the batch's age and what was actually
+ * administered. This is the single source of truth for both the chip states on
+ * the batch card and the dashboard alerts — they previously disagreed because
+ * each computed "done" differently.
+ */
+export function vaccineStatus(
+  schedDay: number,
+  batchAgeDays: number,
+  givenAt: string | null,
+): VaccineStatus {
+  if (givenAt) return { state: "done", givenAt };
+  if (batchAgeDays >= schedDay + VACCINE_OVERDUE_GRACE_DAYS) {
+    return { state: "overdue", daysLate: batchAgeDays - schedDay };
+  }
+  if (batchAgeDays >= schedDay - 1) return { state: "due" }; // ±1 day early is fine
+  return { state: "pending" };
+}
+
 // Incubation window (days)
 export const INCUBATION_DAYS = 21;
 
